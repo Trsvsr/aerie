@@ -14,8 +14,7 @@ struct NotchRootView: View {
     var body: some View {
         VStack(spacing: 0) {
             if hud.isExpanded {
-                // grow out of the notch, no fade: scale from the top anchor
-                // starting at roughly the collapsed pill's footprint
+                // Symmetric: the collapse is the exact reverse of the expand.
                 ExpandedView(hud: hud, geometry: geometry, onToggle: onToggle)
                     .transition(.scale(scale: 0.12, anchor: .top))
                     .onHover { inside in
