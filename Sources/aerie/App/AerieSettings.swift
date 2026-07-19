@@ -33,20 +33,35 @@ final class AerieSettings {
     var seamOffset: Double {
         didSet { defaults.set(seamOffset, forKey: "seamOffsetPt") }
     }
-    /// Sources hidden from the HUD (sessions still tracked, just not shown).
-    var disabledSources: Set<String> {
-        didSet { defaults.set(Array(disabledSources), forKey: "disabledSources") }
+    /// Sources shown in the HUD — opt-in: everything is off until enabled
+    /// (normally by the setup wizard). Sessions from unenabled sources are
+    /// still tracked, just not shown.
+    var enabledSources: Set<String> {
+        didSet { defaults.set(Array(enabledSources), forKey: "enabledSources") }
     }
 
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        hoverToExpand = defaults.object(forKey: "hoverToExpand") as? Bool ?? true
+        hoverToExpand = defaults.object(forKey: "hoverToExpand") as? Bool ?? false
         expandWhenIdle = defaults.object(forKey: "expandWhenIdle") as? Bool ?? true
         hideInFullscreen = defaults.object(forKey: "hideInFullscreen") as? Bool ?? true
-        disabledSources = Set(defaults.stringArray(forKey: "disabledSources") ?? [])
         needsSetup = !(defaults.object(forKey: "setupCompleted") as? Bool ?? false)
+        let initialEnabled: Set<String>
+        if let stored = defaults.stringArray(forKey: "enabledSources") {
+            initialEnabled = Set(stored)
+        } else if defaults.object(forKey: "setupCompleted") != nil
+            || defaults.object(forKey: "disabledSources") != nil {
+            // migrate pre-opt-in installs: enabled = known minus old disabled
+            let disabled = Set(defaults.stringArray(forKey: "disabledSources") ?? [])
+            initialEnabled = Set(ToolIntegration.allCases.map(\.rawValue))
+                .subtracting(disabled)
+            defaults.set(Array(initialEnabled), forKey: "enabledSources")
+        } else {
+            initialEnabled = [] // fresh install: all tools off until the wizard
+        }
+        enabledSources = initialEnabled
         // migrate from the short-lived integer key if present
         seamOffset = defaults.object(forKey: "seamOffsetPt") as? Double
             ?? (defaults.object(forKey: "seamOffset") as? Int).map(Double.init)
@@ -54,14 +69,14 @@ final class AerieSettings {
     }
 
     func isEnabled(_ source: String) -> Bool {
-        !disabledSources.contains(source)
+        enabledSources.contains(source)
     }
 
     func setEnabled(_ source: String, _ enabled: Bool) {
         if enabled {
-            disabledSources.remove(source)
+            enabledSources.insert(source)
         } else {
-            disabledSources.insert(source)
+            enabledSources.remove(source)
         }
     }
 }

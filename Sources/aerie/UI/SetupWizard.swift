@@ -81,8 +81,10 @@ struct SetupWizardPane: View {
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
+            // preselect only what's actually wired up already — everything
+            // else is opt-in, off by default
             for tool in ToolIntegration.allCases {
-                selection[tool] = tool.isDetected && (tool.isInstalled || tool == .claude)
+                selection[tool] = tool.isDetected && tool.isInstalled
             }
         }
     }
