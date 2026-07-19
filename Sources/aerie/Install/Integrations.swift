@@ -234,6 +234,11 @@ enum ToolIntegration: String, CaseIterable {
                       if (!p.info.parentID)
                         notify("SessionStart", { session_id: p.info.id, cwd: p.info.directory });
                       break;
+                    case "session.status":
+                      // busy = model is working even before any tool call
+                      if (p.status?.type === "busy")
+                        notify("UserPromptSubmit", { session_id: p.sessionID, cwd: directory });
+                      break;
                     case "session.idle":
                       notify("Stop", { session_id: p.sessionID, cwd: directory });
                       break;
