@@ -59,26 +59,26 @@ struct WireResponse: Codable {
     var version: String?
 }
 
-let eavesVersion = "0.1.0"
+let aerieVersion = "0.1.0"
 
-func eavesDirectory() -> URL {
-    FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".eaves")
+func aerieDirectory() -> URL {
+    FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".aerie")
 }
 
 func socketPath() -> String {
-    eavesDirectory().appendingPathComponent("daemon.sock").path
+    aerieDirectory().appendingPathComponent("daemon.sock").path
 }
 
 func log(_ message: String) {
     let line = "[\(ISO8601DateFormatter().string(from: Date()))] \(message)\n"
     FileHandle.standardError.write(Data(line.utf8))
-    let url = eavesDirectory().appendingPathComponent("eaves.log")
+    let url = aerieDirectory().appendingPathComponent("aerie.log")
     if let h = try? FileHandle(forWritingTo: url) {
         h.seekToEndOfFile()
         h.write(Data(line.utf8))
         try? h.close()
     } else {
-        try? FileManager.default.createDirectory(at: eavesDirectory(), withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: aerieDirectory(), withIntermediateDirectories: true)
         try? Data(line.utf8).write(to: url)
     }
 }

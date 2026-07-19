@@ -2,18 +2,18 @@
 import PackageDescription
 
 let package = Package(
-    name: "eaves",
+    name: "aerie",
     platforms: [.macOS(.v15)],
     targets: [
         .executableTarget(
-            name: "eaves",
-            path: "Sources/eaves",
+            name: "aerie",
+            path: "Sources/aerie",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
-            name: "eavesTests",
-            dependencies: ["eaves"],
-            path: "Tests/eavesTests",
+            name: "aerieTests",
+            dependencies: ["aerie"],
+            path: "Tests/aerieTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

@@ -18,10 +18,10 @@ struct SetupWizardPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("welcome to eaves")
+            Text("welcome to aerie")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.85))
-            Text("pick the agent CLIs to watch — eaves adds a hook entry to each tool's config (existing hooks untouched, backups taken)")
+            Text("pick the agent CLIs to watch — aerie adds a hook entry to each tool's config (existing hooks untouched, backups taken)")
                 .font(.system(size: 10))
                 .foregroundStyle(.white.opacity(0.45))
                 .fixedSize(horizontal: false, vertical: true)

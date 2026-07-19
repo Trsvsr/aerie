@@ -16,9 +16,9 @@ final class HUDState {
     /// Takes precedence over showSettings while true.
     var showWizard = false
 
-    let settings: EavesSettings
+    let settings: AerieSettings
 
-    init(settings: EavesSettings) {
+    init(settings: AerieSettings) {
         self.settings = settings
     }
 

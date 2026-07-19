@@ -9,7 +9,7 @@ func controlRequest(_ req: WireRequest) -> Never {
         exit(resp.ok ? 0 : 1)
     } catch {
         FileHandle.standardError.write(
-            Data("eaves: app not reachable at \(socketPath()) (\(error))\n".utf8))
+            Data("aerie: app not reachable at \(socketPath()) (\(error))\n".utf8))
         exit(1)
     }
 }
@@ -28,12 +28,12 @@ func statusCommand() -> Never {
         exit(0)
     } catch {
         FileHandle.standardError.write(
-            Data("eaves: app not reachable at \(socketPath()) (\(error))\n".utf8))
+            Data("aerie: app not reachable at \(socketPath()) (\(error))\n".utf8))
         exit(1)
     }
 }
 
-/// `eaves send --session s1 --event PreToolUse [--cwd DIR] [--tool Edit]
+/// `aerie send --session s1 --event PreToolUse [--cwd DIR] [--tool Edit]
 ///  [--file F] [--command C] [--description D] [--notification-type T] [--message M]`
 /// Fake-event injector for demos and manual testing.
 func sendCommand(_ args: [String]) -> Never {
@@ -42,7 +42,7 @@ func sendCommand(_ args: [String]) -> Never {
         return args[i + 1]
     }
     guard let session = val("--session"), let event = val("--event") else {
-        print("usage: eaves send --session ID --event NAME [--cwd DIR] [--tool NAME] [--file F] [--command C] [--description D] [--notification-type T] [--message M]")
+        print("usage: aerie send --session ID --event NAME [--cwd DIR] [--tool NAME] [--file F] [--command C] [--description D] [--notification-type T] [--message M]")
         exit(1)
     }
     controlRequest(WireRequest(

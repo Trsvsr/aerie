@@ -1,9 +1,9 @@
 import Foundation
 
-/// Merges/removes eaves hook entries in ~/.claude/settings.json.
+/// Merges/removes aerie hook entries in ~/.claude/settings.json.
 /// The file already contains other tools' hooks (claude-rpc) on the same
 /// events — we only ever append our own entry or remove entries whose command
-/// contains "eaves hook ". Unknown keys are preserved verbatim.
+/// contains "aerie hook ". Unknown keys are preserved verbatim.
 enum HooksPatcher {
     static let events = [
         "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
@@ -62,7 +62,7 @@ enum HooksPatcher {
             if kept.count != entries.count {
                 hooks[event] = kept.isEmpty ? nil : kept
                 changed = true
-                if dryRun { print("- hooks.\(event): eaves entry") }
+                if dryRun { print("- hooks.\(event): aerie entry") }
             }
         }
         guard changed else { return false }
@@ -78,9 +78,9 @@ enum HooksPatcher {
         guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
         return inner.contains { hook in
             guard let cmd = hook["command"] as? String else { return false }
-            // Match any eaves binary path, so uninstall works after the
+            // Match any aerie binary path, so uninstall works after the
             // binary moved (e.g. dev build path vs installed path).
-            return cmd.hasPrefix(binaryPath) || cmd.contains("eaves hook ")
+            return cmd.hasPrefix(binaryPath) || cmd.contains("aerie hook ")
         }
     }
 
@@ -101,7 +101,7 @@ enum HooksPatcher {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let df = DateFormatter()
         df.dateFormat = "yyyyMMdd-HHmmss"
-        let base = "settings.json.eaves-\(df.string(from: Date()))"
+        let base = "settings.json.aerie-\(df.string(from: Date()))"
         var dest = dir.appendingPathComponent(base)
         var n = 1
         while FileManager.default.fileExists(atPath: dest.path) {

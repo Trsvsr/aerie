@@ -1,7 +1,7 @@
 import Foundation
 
 /// Per-tool hook integrations beyond Claude Code (which HooksPatcher owns).
-/// Each integration knows how to detect the tool, whether eaves hooks are
+/// Each integration knows how to detect the tool, whether aerie hooks are
 /// installed, and how to install/remove them idempotently.
 enum ToolIntegration: String, CaseIterable {
     case claude
@@ -54,22 +54,22 @@ enum ToolIntegration: String, CaseIterable {
         }
     }
 
-    /// Are eaves hooks currently present in the tool's config?
+    /// Are aerie hooks currently present in the tool's config?
     var isInstalled: Bool {
         guard let data = try? Data(contentsOf: configURL),
               let text = String(data: data, encoding: .utf8) else { return false }
-        return text.contains("eaves hook ")
+        return text.contains("aerie hook ")
     }
 
-    /// Event mapping: tool's hook event name → (eaves event, extra CLI flags).
+    /// Event mapping: tool's hook event name → (aerie event, extra CLI flags).
     /// Codex/Cursor payloads are Claude-hook-shaped (Cursor documents Claude
     /// compat explicitly); Antigravity nests tool args differently, which
     /// HookCommand handles with fallback field parsing. One stdin parser
     /// serves everyone — only the source tag and forced types differ.
-    var eventMap: [(toolEvent: String, eavesEvent: String, extraFlags: String)] {
+    var eventMap: [(toolEvent: String, aerieEvent: String, extraFlags: String)] {
         switch self {
         case .claude:
-            return [] // handled by HooksPatcher during `eaves install`
+            return [] // handled by HooksPatcher during `aerie install`
         case .codex:
             return [
                 ("SessionStart", "SessionStart", ""),
@@ -104,7 +104,7 @@ enum ToolIntegration: String, CaseIterable {
     /// [{command}]}}`); the others nest a hooks array per entry.
     private var usesFlatEntries: Bool { self == .cursor }
 
-    /// Install eaves hook entries into the tool's JSON config (merge,
+    /// Install aerie hook entries into the tool's JSON config (merge,
     /// append-only, existing entries preserved). Returns true if changed.
     @discardableResult
     func install(binaryPath: String) throws -> Bool {
@@ -115,10 +115,10 @@ enum ToolIntegration: String, CaseIterable {
         var hooks = root["hooks"] as? [String: Any] ?? [:]
         var changed = false
 
-        for (toolEvent, eavesEvent, flags) in eventMap {
+        for (toolEvent, aerieEvent, flags) in eventMap {
             var entries = hooks[toolEvent] as? [[String: Any]] ?? []
-            let command = "\(binaryPath) hook \(eavesEvent) --source \(rawValue)\(flags)"
-            let already = entries.contains { entryContainsEaves($0) }
+            let command = "\(binaryPath) hook \(aerieEvent) --source \(rawValue)\(flags)"
+            let already = entries.contains { entryContainsAerie($0) }
             if !already {
                 if usesFlatEntries {
                     entries.append(["command": command])
@@ -138,7 +138,7 @@ enum ToolIntegration: String, CaseIterable {
         return true
     }
 
-    /// Remove eaves entries from the tool's config. Returns true if changed.
+    /// Remove aerie entries from the tool's config. Returns true if changed.
     @discardableResult
     func uninstall(binaryPath: String) throws -> Bool {
         guard self != .claude else {
@@ -149,7 +149,7 @@ enum ToolIntegration: String, CaseIterable {
         var changed = false
         for (event, value) in hooks {
             guard let entries = value as? [[String: Any]] else { continue }
-            let kept = entries.filter { !entryContainsEaves($0) }
+            let kept = entries.filter { !entryContainsAerie($0) }
             if kept.count != entries.count {
                 hooks[event] = kept.isEmpty ? nil : kept
                 changed = true
@@ -163,14 +163,14 @@ enum ToolIntegration: String, CaseIterable {
 
     // MARK: helpers
 
-    private func entryContainsEaves(_ entry: [String: Any]) -> Bool {
+    private func entryContainsAerie(_ entry: [String: Any]) -> Bool {
         // flat schema (Cursor): command at top level
-        if let cmd = entry["command"] as? String, cmd.contains("eaves hook ") {
+        if let cmd = entry["command"] as? String, cmd.contains("aerie hook ") {
             return true
         }
         guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
         return inner.contains {
-            ($0["command"] as? String)?.contains("eaves hook ") == true
+            ($0["command"] as? String)?.contains("aerie hook ") == true
         }
     }
 
@@ -187,7 +187,7 @@ enum ToolIntegration: String, CaseIterable {
             let df = DateFormatter()
             df.dateFormat = "yyyyMMdd-HHmmss"
             let backup = url.deletingLastPathComponent()
-                .appendingPathComponent("\(url.lastPathComponent).eaves-backup-\(df.string(from: Date()))")
+                .appendingPathComponent("\(url.lastPathComponent).aerie-backup-\(df.string(from: Date()))")
             try? FileManager.default.copyItem(at: url, to: backup)
         }
         let data = try JSONSerialization.data(

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Minimal blocking unix-socket client used by `eaves hook` and control
+/// Minimal blocking unix-socket client used by `aerie hook` and control
 /// commands. Short timeouts everywhere: a hook must never hold up Claude Code.
 enum SocketClient {
     enum ClientError: Error {

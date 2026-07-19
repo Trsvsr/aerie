@@ -215,7 +215,7 @@ struct ExpandedView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
-                Button("Quit eaves") { NSApplication.shared.terminate(nil) }
+                Button("Quit aerie") { NSApplication.shared.terminate(nil) }
                     .buttonStyle(.plain)
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.35))
@@ -263,7 +263,7 @@ struct SettingsPane: View {
                 Text("TOOLS")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.3))
-                ForEach(EavesSettings.knownTools, id: \.rawValue) { tool in
+                ForEach(AerieSettings.knownTools, id: \.rawValue) { tool in
                     Toggle(isOn: Binding(
                         get: { settings.isEnabled(tool.rawValue) },
                         set: { settings.setEnabled(tool.rawValue, $0) }

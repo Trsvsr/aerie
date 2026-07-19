@@ -1,5 +1,5 @@
 import XCTest
-@testable import eaves
+@testable import aerie
 
 final class ActivityFormatterTests: XCTestCase {
     private func fmt(

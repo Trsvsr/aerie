@@ -1,12 +1,12 @@
 import XCTest
-@testable import eaves
+@testable import aerie
 
 final class HooksPatcherTests: XCTestCase {
     var tmp: URL!
 
     override func setUp() {
         tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("eaves-tests-\(UUID().uuidString)")
+            .appendingPathComponent("aerie-tests-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
     }
 
@@ -46,7 +46,7 @@ final class HooksPatcherTests: XCTestCase {
 
     func testInstallAppendsWithoutClobbering() throws {
         let url = writeFixture()
-        let changed = try HooksPatcher.install(binaryPath: "/usr/local/bin/eaves", settingsURL: url)
+        let changed = try HooksPatcher.install(binaryPath: "/usr/local/bin/aerie", settingsURL: url)
         XCTAssertTrue(changed)
 
         let root = readBack(url)
@@ -59,9 +59,9 @@ final class HooksPatcherTests: XCTestCase {
             let entries = hooks[event] as! [[String: Any]]
             let ours = entries.filter { e in
                 ((e["hooks"] as! [[String: Any]]).first?["command"] as! String)
-                    .contains("eaves hook \(event)")
+                    .contains("aerie hook \(event)")
             }
-            XCTAssertEqual(ours.count, 1, "missing eaves entry for \(event)")
+            XCTAssertEqual(ours.count, 1, "missing aerie entry for \(event)")
         }
         // claude-rpc entries untouched
         let stop = hooks["Stop"] as! [[String: Any]]
@@ -71,16 +71,16 @@ final class HooksPatcherTests: XCTestCase {
 
     func testInstallIsIdempotent() throws {
         let url = writeFixture()
-        _ = try HooksPatcher.install(binaryPath: "/usr/local/bin/eaves", settingsURL: url)
-        let changedAgain = try HooksPatcher.install(binaryPath: "/usr/local/bin/eaves", settingsURL: url)
+        _ = try HooksPatcher.install(binaryPath: "/usr/local/bin/aerie", settingsURL: url)
+        let changedAgain = try HooksPatcher.install(binaryPath: "/usr/local/bin/aerie", settingsURL: url)
         XCTAssertFalse(changedAgain)
     }
 
     func testUninstallRemovesOnlyOurs() throws {
         let url = writeFixture()
-        _ = try HooksPatcher.install(binaryPath: "/usr/local/bin/eaves", settingsURL: url)
-        // simulate the binary having moved: uninstall matches on "eaves hook "
-        let changed = try HooksPatcher.uninstall(binaryPath: "/somewhere/else/eaves", settingsURL: url)
+        _ = try HooksPatcher.install(binaryPath: "/usr/local/bin/aerie", settingsURL: url)
+        // simulate the binary having moved: uninstall matches on "aerie hook "
+        let changed = try HooksPatcher.uninstall(binaryPath: "/somewhere/else/aerie", settingsURL: url)
         XCTAssertTrue(changed)
 
         let hooks = readBack(url)["hooks"] as! [String: Any]
@@ -93,7 +93,7 @@ final class HooksPatcherTests: XCTestCase {
 
     func testInstallIntoMissingFile() throws {
         let url = tmp.appendingPathComponent("fresh.json")
-        let changed = try HooksPatcher.install(binaryPath: "/usr/local/bin/eaves", settingsURL: url)
+        let changed = try HooksPatcher.install(binaryPath: "/usr/local/bin/aerie", settingsURL: url)
         XCTAssertTrue(changed)
         let hooks = readBack(url)["hooks"] as! [String: Any]
         XCTAssertEqual(hooks.count, HooksPatcher.events.count)

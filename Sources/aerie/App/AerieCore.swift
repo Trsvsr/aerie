@@ -12,8 +12,8 @@ struct Snapshot: Sendable {
 /// Composition root shared by `app` and `--headless`: owns the SessionStore
 /// on a serial queue, runs the socket server, sweeps TTLs, and publishes
 /// snapshots after every mutation.
-final class EavesCore {
-    private let queue = DispatchQueue(label: "com.trevor.eaves.core")
+final class AerieCore {
+    private let queue = DispatchQueue(label: "com.trevor.aerie.core")
     private let store = SessionStore()
     private var server: SocketServer?
     private var sweepTimer: DispatchSourceTimer?
@@ -49,7 +49,7 @@ final class EavesCore {
     private func handle(_ req: WireRequest) -> WireResponse {
         switch req.cmd {
         case "ping":
-            return WireResponse(ok: true, version: eavesVersion)
+            return WireResponse(ok: true, version: aerieVersion)
         case "event":
             store.apply(req)
             publish()
@@ -67,7 +67,7 @@ final class EavesCore {
                         activity: $0.activity,
                         ageSeconds: Int(now.timeIntervalSince($0.lastEvent)))
                 },
-                version: eavesVersion)
+                version: aerieVersion)
         case "reset":
             store.reset()
             publish()

@@ -1,5 +1,5 @@
 import XCTest
-@testable import eaves
+@testable import aerie
 
 final class SessionStoreTests: XCTestCase {
     var clock: Date!

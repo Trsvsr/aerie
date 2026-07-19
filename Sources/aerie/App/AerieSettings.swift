@@ -4,8 +4,8 @@ import Observation
 /// User-tunable behavior, persisted to UserDefaults.
 @MainActor
 @Observable
-final class EavesSettings {
-    /// Tools eaves can integrate with; drives the wizard and settings pane.
+final class AerieSettings {
+    /// Tools aerie can integrate with; drives the wizard and settings pane.
     /// Sources not in this list still work (dot fallback).
     static let knownTools: [ToolIntegration] = ToolIntegration.allCases
 

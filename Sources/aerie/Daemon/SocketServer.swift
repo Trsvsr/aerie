@@ -19,14 +19,14 @@ final class SocketServer {
 
         var description: String {
             switch self {
-            case .alreadyRunning: return "another eaves instance is already running"
+            case .alreadyRunning: return "another aerie instance is already running"
             case .bindFailed(let s): return "bind failed: \(s)"
             }
         }
     }
 
     func start() throws {
-        let dir = eavesDirectory()
+        let dir = aerieDirectory()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let path = socketPath()
 

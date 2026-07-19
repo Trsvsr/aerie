@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// `eaves app` entry: manual NSApplication (no @main — argv dispatch happens
+/// `aerie app` entry: manual NSApplication (no @main — argv dispatch happens
 /// first in main.swift).
 func runApp() {
     MainActor.assumeIsolated {
@@ -15,8 +15,8 @@ func runApp() {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let core = EavesCore()
-    private let hud = HUDState(settings: EavesSettings())
+    private let core = AerieCore()
+    private let hud = HUDState(settings: AerieSettings())
     private var windowController: NotchWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApplication.shared.terminate(nil)
             return
         }
-        log("eaves listening at \(socketPath())")
+        log("aerie listening at \(socketPath())")
 
         let wc = NotchWindowController(hud: hud)
         wc.start()

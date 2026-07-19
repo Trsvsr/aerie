@@ -1,12 +1,12 @@
 import Foundation
 
-/// `eaves hook <EventName>` — invoked by Claude Code hooks. Reads the hook
+/// `aerie hook <EventName>` — invoked by Claude Code hooks. Reads the hook
 /// JSON from stdin, forwards a compact event to the app, and exits 0 no
 /// matter what: a broken app must never block Claude Code.
 enum HookCommand {
     static let fieldLimit = 250
 
-    /// argv shape: eaves hook <Event> [--source claude|codex|gemini]
+    /// argv shape: aerie hook <Event> [--source claude|codex|gemini]
     ///             [--notification-type T]
     /// Payloads from all supported tools are Claude-hook-shaped (session_id,
     /// cwd, tool_name, tool_input, …), so one parser serves everyone.
@@ -23,7 +23,7 @@ enum HookCommand {
         // Keep the last raw payload per event around for schema debugging
         // (new tools, new fields) — tiny, local, overwritten constantly.
         if let event = eventFromArgv {
-            let dir = eavesDirectory().appendingPathComponent("last-payloads")
+            let dir = aerieDirectory().appendingPathComponent("last-payloads")
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try? stdin.prefix(4096).write(to: dir.appendingPathComponent("\(event).json"))
         }

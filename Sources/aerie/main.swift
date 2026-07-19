@@ -3,17 +3,17 @@ import Foundation
 // Hand-rolled CLI — small enough that swift-argument-parser isn't worth a dep.
 
 let usage = """
-eaves — Claude Code agent status in the MacBook notch
+aerie — Claude Code agent status in the MacBook notch
 
 usage:
-  eaves [app]                       run the notch HUD (socket listener included)
-  eaves app --headless              run the socket listener without UI (dev)
-  eaves hook <EventName>            (reads Claude Code hook JSON on stdin)
-  eaves install [--dry-run]         install LaunchAgent + Claude Code hooks
-  eaves uninstall                   remove LaunchAgent + hooks
-  eaves status                      show live sessions
-  eaves send --session ID --event NAME [...]   inject a fake event
-  eaves reset | quit
+  aerie [app]                       run the notch HUD (socket listener included)
+  aerie app --headless              run the socket listener without UI (dev)
+  aerie hook <EventName>            (reads Claude Code hook JSON on stdin)
+  aerie install [--dry-run]         install LaunchAgent + Claude Code hooks
+  aerie uninstall                   remove LaunchAgent + hooks
+  aerie status                      show live sessions
+  aerie send --session ID --event NAME [...]   inject a fake event
+  aerie reset | quit
 """
 
 func currentBinaryPath() -> String {
@@ -52,7 +52,7 @@ case "install":
             print("note: restart running Claude Code sessions to pick up the new hooks")
         }
     } catch {
-        FileHandle.standardError.write(Data("eaves: install failed: \(error)\n".utf8))
+        FileHandle.standardError.write(Data("aerie: install failed: \(error)\n".utf8))
         exit(1)
     }
 
@@ -60,9 +60,9 @@ case "uninstall":
     LaunchAgent.uninstall()
     do {
         let changed = try HooksPatcher.uninstall(binaryPath: currentBinaryPath())
-        print(changed ? "hooks removed from ~/.claude/settings.json" : "no eaves hooks found")
+        print(changed ? "hooks removed from ~/.claude/settings.json" : "no aerie hooks found")
     } catch {
-        FileHandle.standardError.write(Data("eaves: hook removal failed: \(error)\n".utf8))
+        FileHandle.standardError.write(Data("aerie: hook removal failed: \(error)\n".utf8))
     }
     print("LaunchAgent removed")
 
@@ -85,7 +85,7 @@ default:
 
 /// Socket listener + state without any UI; prints snapshots to stderr.
 func runHeadless() {
-    let core = EavesCore()
+    let core = AerieCore()
     core.onSnapshot = { snap in
         log("snapshot: \(snap.aggregate.rawValue) — \(snap.summary ?? "-") (\(snap.rows.count) sessions)")
     }
