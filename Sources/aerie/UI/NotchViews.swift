@@ -94,16 +94,36 @@ struct CollapsedView: View {
         let height = visible
             ? geometry.notchHeight + hud.settings.seamOffset
             : geometry.notchHeight - 10
+        // Distinct tools among non-idle sessions, priority order, capped at 3.
+        let activeSources = Array(hud.displayRows
+            .filter { $0.state != .idle }
+            .map(\.source)
+            .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+            .prefix(3))
         HStack(spacing: 0) {
-            // left wing: logo of the top-priority session's tool.
+            // left wing: overlapped badge stack of every running tool.
             // The side wall is inset 8pt by the top flare, so center within
             // the visible wing (wall → notch), not the full frame.
             HStack {
                 Spacer(minLength: 0)
-                SourceBadge(
-                    source: hud.displayRows.first?.source ?? "claude",
-                    state: hud.displayAggregate,
-                    size: 13)
+                if activeSources.isEmpty {
+                    SourceBadge(
+                        source: hud.displayRows.first?.source ?? "claude",
+                        state: hud.displayAggregate,
+                        size: 13)
+                } else {
+                    HStack(spacing: -3) {
+                        ForEach(Array(activeSources.enumerated()), id: \.element) { i, source in
+                            SourceBadge(
+                                source: source,
+                                state: i == 0 ? hud.displayAggregate : .working,
+                                size: 11)
+                                // black disc separates overlapped badges
+                                .background(Circle().fill(.black).frame(width: 15, height: 15))
+                                .zIndex(Double(activeSources.count - i))
+                        }
+                    }
+                }
                 Spacer(minLength: 0)
             }
             .padding(.leading, 8)
@@ -116,12 +136,20 @@ struct CollapsedView: View {
                 Spacer().frame(width: max(centerWidth, 0))
             }
 
-            // right wing (mirror: wall inset on the trailing side)
+            // right wing: solo session → running duration; fleet → count
             HStack {
                 Spacer(minLength: 0)
-                Text("\(hud.displayRows.count)")
-                    .font(.caption2.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.75))
+                if hud.displayRows.count == 1, let solo = hud.displayRows.first {
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        Text(compactDuration(from: solo.firstEvent, to: context.date))
+                            .font(.caption2.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.75))
+                    }
+                } else {
+                    Text("\(hud.displayRows.count)")
+                        .font(.caption2.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.75))
+                }
                 Spacer(minLength: 0)
             }
             .padding(.trailing, 8)
@@ -137,6 +165,14 @@ struct CollapsedView: View {
         )
         .contentShape(Rectangle())
         .animation(.spring(duration: 0.35, bounce: 0.25), value: visible)
+    }
+
+    /// "47s", "4m", "1h12m" — coarse on purpose; the pill isn't a stopwatch.
+    private func compactDuration(from start: Date, to now: Date) -> String {
+        let s = max(0, Int(now.timeIntervalSince(start)))
+        if s < 60 { return "\(s)s" }
+        if s < 3600 { return "\(s / 60)m" }
+        return "\(s / 3600)h\((s % 3600) / 60)m"
     }
 }
 

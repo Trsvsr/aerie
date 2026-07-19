@@ -34,6 +34,7 @@ struct SessionRow: Identifiable, Equatable, Sendable {
     let state: SessionState
     let activity: String
     let lastEvent: Date
+    let firstEvent: Date
 }
 
 /// Pure per-session state machine + aggregation. No I/O; clock injected for tests.
@@ -41,6 +42,7 @@ final class SessionStore {
     struct Session {
         var state: SessionState
         var lastEvent: Date
+        var firstEvent: Date
         var cwd: String?
         var activity: String
         var source: String = "claude"
@@ -98,16 +100,16 @@ final class SessionStore {
             return
         case "SessionStart":
             sessions[sessionID] = Session(
-                state: .idle, lastEvent: ts, cwd: req.cwd, activity: "session started",
-                source: req.source ?? "claude")
+                state: .idle, lastEvent: ts, firstEvent: ts, cwd: req.cwd,
+                activity: "session started", source: req.source ?? "claude")
             return
         default:
             break
         }
 
         var s = sessions[sessionID]
-            ?? Session(state: .idle, lastEvent: ts, cwd: req.cwd, activity: "",
-                       source: req.source ?? "claude")
+            ?? Session(state: .idle, lastEvent: ts, firstEvent: ts, cwd: req.cwd,
+                       activity: "", source: req.source ?? "claude")
         s.lastEvent = ts
         if let cwd = req.cwd { s.cwd = cwd }
         if let source = req.source { s.source = source }
@@ -183,7 +185,8 @@ final class SessionStore {
                     model: s.model,
                     state: s.state,
                     activity: s.activity,
-                    lastEvent: s.lastEvent)
+                    lastEvent: s.lastEvent,
+                    firstEvent: s.firstEvent)
             }
             .sorted {
                 if $0.state != $1.state { return $0.state > $1.state }
