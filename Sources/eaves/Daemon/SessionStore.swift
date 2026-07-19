@@ -1,0 +1,176 @@
+import Foundation
+
+enum SessionState: String, Codable, Comparable {
+    case idle
+    case working
+    case needsInput
+
+    private var rank: Int {
+        switch self {
+        case .idle: return 0
+        case .working: return 1
+        case .needsInput: return 2
+        }
+    }
+
+    static func < (lhs: SessionState, rhs: SessionState) -> Bool {
+        lhs.rank < rhs.rank
+    }
+}
+
+/// Aggregate state for the whole machine.
+enum AggregateState: String, Codable {
+    case off        // no live sessions worth showing
+    case working
+    case needsInput
+}
+
+/// Immutable per-session row handed to the UI / status command.
+struct SessionRow: Identifiable, Equatable, Sendable {
+    let id: String
+    let project: String
+    let source: String          // originating tool ("claude", …)
+    let state: SessionState
+    let activity: String
+    let lastEvent: Date
+}
+
+/// Pure per-session state machine + aggregation. No I/O; clock injected for tests.
+final class SessionStore {
+    struct Session {
+        var state: SessionState
+        var lastEvent: Date
+        var cwd: String?
+        var activity: String
+        var source: String = "claude"
+    }
+
+    struct TTLs {
+        var working: TimeInterval = 15 * 60
+        var needsInput: TimeInterval = 2 * 60 * 60
+        var idle: TimeInterval = 60 * 60
+    }
+
+    private(set) var sessions: [String: Session] = [:]
+    var ttls = TTLs()
+    let now: () -> Date
+
+    init(now: @escaping () -> Date = Date.init) {
+        self.now = now
+    }
+
+    /// Notification types that mean "Claude is blocked on the user".
+    static let needsInputNotifications: Set<String> = [
+        "permission_prompt", "idle_prompt", "agent_needs_input",
+        // older/alternate spellings seen in the wild
+        "permission_needed", "waiting_for_input",
+    ]
+
+    func apply(_ req: WireRequest) {
+        guard let sessionID = req.sessionID, let event = req.event else { return }
+        let ts = now()
+
+        switch event {
+        case "SessionEnd":
+            sessions[sessionID] = nil
+            return
+        case "SessionStart":
+            sessions[sessionID] = Session(
+                state: .idle, lastEvent: ts, cwd: req.cwd, activity: "session started",
+                source: req.source ?? "claude")
+            return
+        default:
+            break
+        }
+
+        var s = sessions[sessionID]
+            ?? Session(state: .idle, lastEvent: ts, cwd: req.cwd, activity: "",
+                       source: req.source ?? "claude")
+        s.lastEvent = ts
+        if let cwd = req.cwd { s.cwd = cwd }
+        if let source = req.source { s.source = source }
+
+        switch event {
+        case "UserPromptSubmit":
+            s.state = .working
+            s.activity = "thinking…"
+        case "PreToolUse":
+            s.state = .working
+            s.activity = ActivityFormatter.format(
+                toolName: req.toolName, file: req.toolFile, command: req.toolCommand,
+                description: req.toolDescription, pattern: req.toolPattern, url: req.toolURL)
+        case "PostToolUse":
+            s.state = .working
+            s.activity = "thinking…"
+        case "Stop":
+            s.state = .idle
+            s.activity = "done — waiting for you"
+        case "Notification":
+            if let t = req.notificationType, Self.needsInputNotifications.contains(t) {
+                s.state = .needsInput
+                s.activity = ActivityFormatter.needsInputLine(message: req.message)
+            }
+            // other notification types just refresh lastEvent
+        default:
+            break // unknown events refresh lastEvent only
+        }
+        sessions[sessionID] = s
+    }
+
+    /// Demote/remove stale sessions (terminals killed without SessionEnd, etc.).
+    func sweep() {
+        let ts = now()
+        for (id, s) in sessions {
+            let age = ts.timeIntervalSince(s.lastEvent)
+            switch s.state {
+            case .working where age > ttls.working,
+                 .needsInput where age > ttls.needsInput:
+                var demoted = s
+                demoted.state = .idle
+                demoted.activity = "stale"
+                sessions[id] = demoted
+            case .idle where age > ttls.idle:
+                sessions[id] = nil
+            default:
+                break
+            }
+        }
+    }
+
+    func aggregate() -> AggregateState {
+        guard let top = sessions.values.map(\.state).max() else { return .off }
+        switch top {
+        case .needsInput: return .needsInput
+        case .working: return .working
+        case .idle: return .off
+        }
+    }
+
+    /// needsInput first, then working, then idle; most-recent first within each.
+    func rows() -> [SessionRow] {
+        sessions
+            .map { id, s in
+                SessionRow(
+                    id: id,
+                    project: s.cwd.map { ($0 as NSString).lastPathComponent } ?? "?",
+                    source: s.source,
+                    state: s.state,
+                    activity: s.activity,
+                    lastEvent: s.lastEvent)
+            }
+            .sorted {
+                if $0.state != $1.state { return $0.state > $1.state }
+                return $0.lastEvent > $1.lastEvent
+            }
+    }
+
+    /// The one-liner for the collapsed widget: top-priority session's line.
+    func summary() -> String? {
+        guard let top = rows().first, aggregate() != .off else { return nil }
+        return "\(top.project): \(top.activity)"
+    }
+
+    func reset() {
+        sessions.removeAll()
+    }
+}
