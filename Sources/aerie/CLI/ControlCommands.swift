@@ -33,8 +33,9 @@ func statusCommand() -> Never {
     }
 }
 
-/// `aerie send --session s1 --event PreToolUse [--cwd DIR] [--tool Edit]
-///  [--file F] [--command C] [--description D] [--notification-type T] [--message M]`
+/// `aerie send --session s1 --event PreToolUse [--source claude] [--cwd DIR]
+///  [--tool Edit] [--file F] [--command C] [--description D]
+///  [--notification-type T] [--message M] [--model M]`
 /// Fake-event injector for demos and manual testing.
 func sendCommand(_ args: [String]) -> Never {
     func val(_ flag: String) -> String? {
@@ -42,13 +43,15 @@ func sendCommand(_ args: [String]) -> Never {
         return args[i + 1]
     }
     guard let session = val("--session"), let event = val("--event") else {
-        print("usage: aerie send --session ID --event NAME [--cwd DIR] [--tool NAME] [--file F] [--command C] [--description D] [--notification-type T] [--message M]")
+        print("usage: aerie send --session ID --event NAME [--source TOOL] [--cwd DIR] [--tool NAME] [--file F] [--command C] [--description D] [--notification-type T] [--message M] [--model M]")
         exit(1)
     }
     controlRequest(WireRequest(
         cmd: "event", sessionID: session, event: event,
+        source: val("--source"),
         cwd: val("--cwd"), toolName: val("--tool"), toolFile: val("--file"),
         toolCommand: val("--command"), toolDescription: val("--description"),
         toolPattern: val("--pattern"), toolURL: val("--url"),
-        notificationType: val("--notification-type"), message: val("--message")))
+        notificationType: val("--notification-type"), message: val("--message"),
+        model: val("--model")))
 }

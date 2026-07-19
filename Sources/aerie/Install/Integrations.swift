@@ -8,6 +8,8 @@ enum ToolIntegration: String, CaseIterable {
     case codex
     case antigravity
     case cursor
+    case opencode
+    case pi
 
     var displayName: String {
         switch self {
@@ -15,7 +17,15 @@ enum ToolIntegration: String, CaseIterable {
         case .codex: return "Codex CLI"
         case .antigravity: return "Antigravity CLI"
         case .cursor: return "Cursor"
+        case .opencode: return "opencode"
+        case .pi: return "Pi"
         }
+    }
+
+    /// How the integration installs: merged into a JSON hooks config, or a
+    /// generated script file dropped into the tool's plugin/extension dir.
+    var installsAsScript: Bool {
+        self == .opencode || self == .pi
     }
 
     private static var home: URL { FileManager.default.homeDirectoryForCurrentUser }
@@ -30,6 +40,9 @@ enum ToolIntegration: String, CaseIterable {
         case .antigravity: return Self.home.appendingPathComponent(".gemini/antigravity-cli/hooks.json")
         // Shared by the Cursor IDE and cursor-agent CLI (same schema).
         case .cursor: return Self.home.appendingPathComponent(".cursor/hooks.json")
+        // Generated plugin/extension files (script-based installs).
+        case .opencode: return Self.home.appendingPathComponent(".config/opencode/plugins/aerie.js")
+        case .pi: return Self.home.appendingPathComponent(".pi/agent/extensions/aerie-status.ts")
         }
     }
 
@@ -51,11 +64,23 @@ enum ToolIntegration: String, CaseIterable {
             return binaryOnPath("cursor-agent") || binaryOnPath("cursor")
                 || FileManager.default.fileExists(
                     atPath: Self.home.appendingPathComponent(".cursor").path)
+        case .opencode:
+            return binaryOnPath("opencode")
+                || FileManager.default.fileExists(
+                    atPath: Self.home.appendingPathComponent(".config/opencode").path)
+        case .pi:
+            return binaryOnPath("pi")
+                || FileManager.default.fileExists(
+                    atPath: Self.home.appendingPathComponent(".pi/agent").path)
         }
     }
 
     /// Are aerie hooks currently present in the tool's config?
     var isInstalled: Bool {
+        if installsAsScript {
+            // whole file is ours; presence = installed
+            return FileManager.default.fileExists(atPath: configURL.path)
+        }
         guard let data = try? Data(contentsOf: configURL),
               let text = String(data: data, encoding: .utf8) else { return false }
         return text.contains("aerie hook ")
@@ -97,6 +122,8 @@ enum ToolIntegration: String, CaseIterable {
                 ("stop", "Stop", ""),
                 ("sessionEnd", "SessionEnd", ""),
             ]
+        case .opencode, .pi:
+            return [] // script-based: the generated plugin maps events itself
         }
     }
 
@@ -105,11 +132,23 @@ enum ToolIntegration: String, CaseIterable {
     private var usesFlatEntries: Bool { self == .cursor }
 
     /// Install aerie hook entries into the tool's JSON config (merge,
-    /// append-only, existing entries preserved). Returns true if changed.
+    /// append-only, existing entries preserved), or write the generated
+    /// plugin/extension script for script-based tools. Returns true if changed.
     @discardableResult
     func install(binaryPath: String) throws -> Bool {
         guard self != .claude else {
             return try HooksPatcher.install(binaryPath: binaryPath)
+        }
+        if installsAsScript {
+            let script = scriptContents(binaryPath: binaryPath)
+            if let existing = try? String(contentsOf: configURL, encoding: .utf8),
+               existing == script {
+                return false
+            }
+            try FileManager.default.createDirectory(
+                at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try script.write(to: configURL, atomically: true, encoding: .utf8)
+            return true
         }
         var root = readJSON(configURL)
         var hooks = root["hooks"] as? [String: Any] ?? [:]
@@ -144,6 +183,11 @@ enum ToolIntegration: String, CaseIterable {
         guard self != .claude else {
             return try HooksPatcher.uninstall(binaryPath: binaryPath)
         }
+        if installsAsScript {
+            guard FileManager.default.fileExists(atPath: configURL.path) else { return false }
+            try FileManager.default.removeItem(at: configURL)
+            return true
+        }
         var root = readJSON(configURL)
         guard var hooks = root["hooks"] as? [String: Any] else { return false }
         var changed = false
@@ -159,6 +203,122 @@ enum ToolIntegration: String, CaseIterable {
         root["hooks"] = hooks.isEmpty ? nil : hooks
         try writeJSON(root, to: configURL)
         return true
+    }
+
+    /// Generated plugin/extension source for script-based integrations.
+    /// Both funnel tool events into the same `aerie hook` stdin contract the
+    /// JSON-config tools use, with fields renamed to Claude-hook shape.
+    func scriptContents(binaryPath: String) -> String {
+        switch self {
+        case .opencode:
+            return """
+            // Generated by `aerie install` — do not edit (regenerated on install).
+            // Forwards opencode session/tool/permission events to the aerie notch HUD.
+            export const AeriePlugin = async ({ directory }) => {
+              const notify = (hookEvent, payload, extra = []) => {
+                try {
+                  const proc = Bun.spawn(
+                    [\(jsString(binaryPath)), "hook", hookEvent, "--source", "opencode", ...extra],
+                    { stdin: "pipe", stdout: "ignore", stderr: "ignore" });
+                  proc.stdin.write(JSON.stringify(payload));
+                  proc.stdin.end();
+                  // fire-and-forget: never block opencode's event loop
+                } catch {}
+              };
+              return {
+                event: async ({ event }) => {
+                  const p = event.properties;
+                  switch (event.type) {
+                    case "session.created":
+                      // subagent sessions carry parentID — skip, parent covers them
+                      if (!p.info.parentID)
+                        notify("SessionStart", { session_id: p.info.id, cwd: p.info.directory });
+                      break;
+                    case "session.idle":
+                      notify("Stop", { session_id: p.sessionID, cwd: directory });
+                      break;
+                    case "session.deleted":
+                      notify("SessionEnd", { session_id: p.info.id });
+                      break;
+                    case "permission.updated":
+                      notify("Notification",
+                        { session_id: p.sessionID, cwd: directory, message: p.title },
+                        ["--notification-type", "permission_prompt"]);
+                      break;
+                    case "message.part.updated": {
+                      const part = p.part;
+                      if (part.type !== "tool") break;
+                      if (part.state.status === "running")
+                        notify("PreToolUse", {
+                          session_id: part.sessionID, cwd: directory,
+                          tool_name: part.tool, tool_input: part.state.input ?? {},
+                        });
+                      else if (part.state.status === "completed")
+                        notify("PostToolUse",
+                          { session_id: part.sessionID, cwd: directory, tool_name: part.tool });
+                      break;
+                    }
+                  }
+                },
+              };
+            };
+            """
+        case .pi:
+            return """
+            // Generated by `aerie install` — do not edit (regenerated on install).
+            // Forwards Pi session/tool events to the aerie notch HUD.
+            import { spawn } from "node:child_process";
+
+            export default function (pi) {
+              let sessionId = null;
+              const notify = (hookEvent, payload, extra = []) => {
+                try {
+                  const proc = spawn(
+                    \(jsString(binaryPath)),
+                    ["hook", hookEvent, "--source", "pi", ...extra],
+                    { stdio: ["pipe", "ignore", "ignore"] });
+                  proc.stdin.write(JSON.stringify(payload));
+                  proc.stdin.end();
+                  proc.unref(); // fire-and-forget
+                } catch {}
+              };
+              const sid = (ctx) => {
+                try { sessionId = ctx?.sessionManager?.getSessionId() ?? sessionId; } catch {}
+                return sessionId ?? "pi-unknown";
+              };
+
+              pi.on("session_start", async (event, ctx) => {
+                notify("SessionStart", { session_id: sid(ctx), cwd: ctx?.cwd });
+              });
+              pi.on("tool_call", async (event, ctx) => {
+                notify("PreToolUse", {
+                  session_id: sid(ctx), cwd: ctx?.cwd,
+                  tool_name: event.toolName, tool_input: event.input ?? {},
+                });
+              });
+              pi.on("tool_result", async (event, ctx) => {
+                notify("PostToolUse",
+                  { session_id: sid(ctx), cwd: ctx?.cwd, tool_name: event.toolName });
+              });
+              pi.on("agent_settled", async (event, ctx) => {
+                notify("Stop", { session_id: sid(ctx), cwd: ctx?.cwd });
+              });
+              pi.on("session_shutdown", async (event, ctx) => {
+                notify("SessionEnd", { session_id: sid(ctx) });
+              });
+            }
+            """
+        default:
+            return "" // JSON-config tools never call this
+        }
+    }
+
+    /// JS string literal with escaping for embedding paths.
+    private func jsString(_ s: String) -> String {
+        let escaped = s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     // MARK: helpers

@@ -22,7 +22,7 @@ enum ActivityFormatter {
         case "Read", "read_file", "read_many_files":
             if let f = file { return "reading \(basename(f))" }
             return "reading"
-        case "Bash", "shell", "local_shell", "run_shell_command", "run_command", "run_terminal_cmd":
+        case "Bash", "bash", "shell", "local_shell", "run_shell_command", "run_command", "run_terminal_cmd":
             // generous caps — the expanded view wraps to two lines; the
             // collapsed summary truncates separately at render time
             if let d = description, !d.isEmpty { return "running: \(oneLine(d, max: 120))" }

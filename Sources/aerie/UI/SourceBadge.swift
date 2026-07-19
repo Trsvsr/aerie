@@ -18,6 +18,8 @@ struct SourceBadge: View {
         case "antigravity", "gemini":
             return Color(red: 0.31, green: 0.55, blue: 0.96)             // Google blue
         case "cursor": return Color(white: 0.85)                         // Cursor mono
+        case "opencode": return Color(red: 0.99, green: 0.87, blue: 0.32) // opencode gold
+        case "pi": return Color(red: 0.62, green: 0.55, blue: 0.98)      // Pi violet
         default: return .orange
         }
     }
@@ -49,6 +51,22 @@ struct SourceBadge: View {
                     .fill(tint)
             case "cursor":
                 CursorCubeShape()
+                    .fill(tint, style: FillStyle(eoFill: true))
+            case "opencode":
+                // two-tone like the original mark: bright outer frame,
+                // dimmed inner block — opacities of the tint so state
+                // colors (red pulse, idle gray) still read
+                ZStack {
+                    SVGShape(pathData: SourceBadge.opencodeFramePath, viewBox: 320,
+                             origin: CGPoint(x: 96, y: 96))
+                        .fill(tint, style: FillStyle(eoFill: true))
+                    SVGShape(pathData: SourceBadge.opencodeBlockPath, viewBox: 320,
+                             origin: CGPoint(x: 96, y: 96))
+                        .fill(tint.opacity(0.45))
+                }
+            case "pi":
+                SVGShape(pathData: SourceBadge.piMarkPath, viewBox: 470,
+                         origin: CGPoint(x: 165.29, y: 165.29))
                     .fill(tint, style: FillStyle(eoFill: true))
             default:
                 Circle()
@@ -126,6 +144,16 @@ extension SourceBadge {
     /// (Wikimedia Commons "Google Antigravity Logo.svg", glyph spans
     /// x 9.8–101.4, y 18.4–97.2 → viewBox 92 with origin offset).
     static let antigravityMarkPath = "M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z"
+
+    /// opencode terminal-frame mark (opencode.ai favicon), two layers:
+    /// outer frame (even-odd hollows the center) and the dimmer inner block.
+    /// Glyph spans 128–384 of the 512 viewBox → viewBox 320, origin 96/96.
+    static let opencodeFramePath = "M384 416H128V96H384V416ZM320 160H192V352H320V160Z"
+    static let opencodeBlockPath = "M320 224V352H192V224H320Z"
+
+    /// Pi coding agent mark (pi.dev favicon): blocky π glyph, spans
+    /// 165.29–634.72 → viewBox ~470 with origin offset.
+    static let piMarkPath = "M165.29 165.29 H517.36 V400 H400 V517.36 H282.65 V634.72 H165.29 Z M282.65 282.65 V400 H400 V282.65 Z M517.36 400 H634.72 V634.72 H517.36 Z"
 
     /// Official Claude AI symbol, path data from the Wikimedia Commons SVG
     /// (viewBox 0 0 100 100), CC — Anthropic brand mark.
