@@ -132,6 +132,8 @@ struct CollapsedView: View {
         }
         .frame(height: height)
         .background(
+            // 8/12 verified by eye against the hardware (notchbay.com claims
+            // 4/8, but that rendered too boxy on this panel — trust the eye)
             NotchShape(topRadius: 8, bottomRadius: 12).fill(.black)
         )
         .contentShape(Rectangle())

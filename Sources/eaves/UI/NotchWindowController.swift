@@ -140,9 +140,24 @@ final class NotchWindowController {
         NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main
     }
 
+    /// safeAreaInsets.top reads 0 while a fullscreen space is active — the
+    /// notch "disappears" from the API even though the hardware hasn't moved.
+    /// Keep the last real notch geometry so a reposition during fullscreen
+    /// doesn't rebuild the widget as the no-notch fallback pill.
+    private func detectGeometry(on screen: NSScreen) -> NotchGeometry {
+        let fresh = NotchGeometry.detect(on: screen)
+        if !fresh.hasNotch, geometry.hasNotch,
+           screen.frame.width == cachedNotchScreenWidth {
+            return geometry
+        }
+        if fresh.hasNotch { cachedNotchScreenWidth = screen.frame.width }
+        return fresh
+    }
+    private var cachedNotchScreenWidth: CGFloat = 0
+
     private func buildPanel() {
         guard let screen = targetScreen() else { return }
-        geometry = NotchGeometry.detect(on: screen)
+        geometry = detectGeometry(on: screen)
 
         let frame = NSRect(
             x: screen.frame.midX - NotchGeometry.panelWidth / 2,
@@ -165,7 +180,7 @@ final class NotchWindowController {
 
     private func reposition() {
         guard let panel, let screen = targetScreen() else { return }
-        geometry = NotchGeometry.detect(on: screen)
+        geometry = detectGeometry(on: screen)
         hosting?.rootView = NotchRootView(hud: hud, geometry: geometry) { [weak self] in
             self?.toggleExpanded()
         }
