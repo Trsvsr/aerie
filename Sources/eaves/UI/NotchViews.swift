@@ -93,7 +93,7 @@ struct CollapsedView: View {
         // user can see the seam, so the offset is tunable in settings.
         let centerWidth = visible ? geometry.notchWidth : geometry.notchWidth - 44
         let height = visible
-            ? geometry.notchHeight + CGFloat(hud.settings.seamOffset)
+            ? geometry.notchHeight + hud.settings.seamOffset
             : geometry.notchHeight - 10
         HStack(spacing: 0) {
             // left wing: logo of the top-priority session's tool.
@@ -249,8 +249,8 @@ struct SettingsPane: View {
                 HStack(spacing: 8) {
                     Text("Notch seam")
                     Stepper(
-                        "\(settings.seamOffset) pt",
-                        value: $settings.seamOffset, in: -6...4)
+                        String(format: "%+.1f pt", settings.seamOffset),
+                        value: $settings.seamOffset, in: -6...4, step: 0.5)
                         .fixedSize()
                     Text("adjust until the widget meets the notch edge")
                         .font(.system(size: 9))

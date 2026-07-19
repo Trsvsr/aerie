@@ -27,10 +27,11 @@ final class EavesSettings {
         didSet { defaults.set(hideInFullscreen, forKey: "hideInFullscreen") }
     }
     /// Points added to safeAreaInsets.top for the active pill's height.
-    /// The hardware notch edge isn't exactly the reported inset; only the
-    /// user can see the true seam, so this is tunable live from settings.
-    var seamOffset: Int {
-        didSet { defaults.set(seamOffset, forKey: "seamOffset") }
+    /// The hardware notch edge isn't exactly the reported inset — on 2x
+    /// retina it can sit on a half-point boundary — so this is tunable in
+    /// 0.5pt steps, live from settings.
+    var seamOffset: Double {
+        didSet { defaults.set(seamOffset, forKey: "seamOffsetPt") }
     }
     /// Sources hidden from the HUD (sessions still tracked, just not shown).
     var disabledSources: Set<String> {
@@ -46,7 +47,10 @@ final class EavesSettings {
         hideInFullscreen = defaults.object(forKey: "hideInFullscreen") as? Bool ?? true
         disabledSources = Set(defaults.stringArray(forKey: "disabledSources") ?? [])
         needsSetup = !(defaults.object(forKey: "setupCompleted") as? Bool ?? false)
-        seamOffset = defaults.object(forKey: "seamOffset") as? Int ?? -1
+        // migrate from the short-lived integer key if present
+        seamOffset = defaults.object(forKey: "seamOffsetPt") as? Double
+            ?? (defaults.object(forKey: "seamOffset") as? Int).map(Double.init)
+            ?? -0.5
     }
 
     func isEnabled(_ source: String) -> Bool {
