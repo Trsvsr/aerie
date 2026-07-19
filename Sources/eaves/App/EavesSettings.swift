@@ -50,7 +50,7 @@ final class EavesSettings {
         // migrate from the short-lived integer key if present
         seamOffset = defaults.object(forKey: "seamOffsetPt") as? Double
             ?? (defaults.object(forKey: "seamOffset") as? Int).map(Double.init)
-            ?? -0.5
+            ?? 0
     }
 
     func isEnabled(_ source: String) -> Bool {
