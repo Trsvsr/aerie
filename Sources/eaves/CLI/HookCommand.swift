@@ -50,12 +50,15 @@ enum HookCommand {
             ?? (obj["workspace_roots"] as? [String])?.first
         var notificationType = forcedNotificationType ?? obj["notification_type"] as? String
         let message = obj["message"] as? String
-        // Some payloads only carry the reason in `message`; sniff for the
-        // permission phrasing as a fallback.
+        // Some payloads only carry the reason in `message`; sniff as a
+        // fallback — but keep idle phrasing distinct from permission
+        // phrasing, they drive very different UI (red pulse vs calm idle).
         if notificationType == nil, event == "Notification", let msg = message {
             let m = msg.lowercased()
-            if m.contains("permission") || m.contains("waiting for your input") {
+            if m.contains("permission") {
                 notificationType = "permission_prompt"
+            } else if m.contains("waiting for your input") || m.contains("is waiting") {
+                notificationType = "idle_prompt"
             }
         }
 

@@ -60,6 +60,14 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(store.sessions["s1"]?.state, .working)
     }
 
+    func testIdleNotificationGoesIdleNotRed() {
+        event("UserPromptSubmit")
+        event("Notification", notificationType: "idle_prompt",
+              message: "Claude is waiting for your input")
+        XCTAssertEqual(store.sessions["s1"]?.state, .idle)
+        XCTAssertEqual(store.aggregate(), .off)
+    }
+
     func testUnknownSessionEventCreatesEntry() {
         // Events can arrive for sessions started before the app launched.
         event("PreToolUse", tool: "Bash", command: "ls")

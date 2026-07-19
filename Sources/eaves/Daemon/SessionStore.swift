@@ -59,11 +59,18 @@ final class SessionStore {
         self.now = now
     }
 
-    /// Notification types that mean "Claude is blocked on the user".
+    /// Notification types that mean the agent is genuinely blocked on the
+    /// user (permission dialogs etc.) — these pulse red. Idle notifications
+    /// ("Claude is waiting for your input" after a finished turn) are NOT
+    /// here: finished-and-idle isn't an emergency and shouldn't flash.
     static let needsInputNotifications: Set<String> = [
-        "permission_prompt", "idle_prompt", "agent_needs_input",
-        // older/alternate spellings seen in the wild
-        "permission_needed", "waiting_for_input",
+        "permission_prompt", "agent_needs_input", "permission_needed",
+    ]
+
+    /// Notification types that just mean the turn ended and the agent is
+    /// parked waiting — treated as idle.
+    static let idleNotifications: Set<String> = [
+        "idle_prompt", "waiting_for_input",
     ]
 
     func apply(_ req: WireRequest) {
@@ -109,6 +116,9 @@ final class SessionStore {
             if let t = req.notificationType, Self.needsInputNotifications.contains(t) {
                 s.state = .needsInput
                 s.activity = ActivityFormatter.needsInputLine(message: req.message)
+            } else if let t = req.notificationType, Self.idleNotifications.contains(t) {
+                s.state = .idle
+                s.activity = "waiting for you"
             }
             // other notification types just refresh lastEvent
         default:
