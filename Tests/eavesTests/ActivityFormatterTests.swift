@@ -34,11 +34,12 @@ final class ActivityFormatterTests: XCTestCase {
     }
 
     func testBashCommandFlattenedAndTruncated() {
-        let long = "for f in $(ls); do\n  echo $f\n  cat $f | grep -c thing\ndone extra extra extra"
+        let long = "for f in $(ls); do\n  echo $f\n  cat $f | grep -c thing\ndone "
+            + String(repeating: "extra ", count: 30)
         let out = fmt(tool: "Bash", command: long)
         XCTAssertTrue(out.hasPrefix("running: for f in $(ls); do echo"))
         XCTAssertFalse(out.contains("\n"))
-        XCTAssertLessThanOrEqual(out.count, "running: ".count + 40)
+        XCTAssertLessThanOrEqual(out.count, "running: ".count + 120)
     }
 
     func testNeedsInputLine() {

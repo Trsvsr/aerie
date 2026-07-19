@@ -23,11 +23,13 @@ enum ActivityFormatter {
             if let f = file { return "reading \(basename(f))" }
             return "reading"
         case "Bash", "shell", "local_shell", "run_shell_command", "run_command", "run_terminal_cmd":
-            if let d = description, !d.isEmpty { return "running: \(oneLine(d, max: 40))" }
-            if let c = command, !c.isEmpty { return "running: \(oneLine(c, max: 40))" }
+            // generous caps — the expanded view wraps to two lines; the
+            // collapsed summary truncates separately at render time
+            if let d = description, !d.isEmpty { return "running: \(oneLine(d, max: 120))" }
+            if let c = command, !c.isEmpty { return "running: \(oneLine(c, max: 120))" }
             return "running command"
         case "Grep", "Glob", "grep", "glob", "search_file_content", "find_files":
-            if let p = pattern, !p.isEmpty { return "searching \(oneLine(p, max: 30))" }
+            if let p = pattern, !p.isEmpty { return "searching \(oneLine(p, max: 60))" }
             return "searching"
         case "WebFetch", "web_fetch", "fetch":
             if let u = url, let host = URL(string: u)?.host { return "fetching \(host)" }
@@ -35,7 +37,7 @@ enum ActivityFormatter {
         case "WebSearch", "web_search", "google_web_search":
             return "searching web"
         case "Task", "Agent", "spawn_agent":
-            if let d = description, !d.isEmpty { return "agent: \(oneLine(d, max: 34))" }
+            if let d = description, !d.isEmpty { return "agent: \(oneLine(d, max: 100))" }
             return "running agent"
         case "TodoWrite", "TaskCreate", "TaskUpdate", "update_plan", "save_memory":
             return "updating plan"

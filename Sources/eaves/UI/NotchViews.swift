@@ -329,9 +329,14 @@ struct SessionRowView: View {
                                 Capsule().fill(.white.opacity(0.08)))
                     }
                 }
-                Text(ActivityFormatter.truncate(row.activity, max: 60))
+                // Wrap to two lines before truncating — most lines are one
+                // line anyway, so rows only grow when there's real content.
+                Text(row.activity)
                     .font(.caption2.monospaced())
                     .foregroundStyle(.white.opacity(0.55))
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
             TimelineView(.periodic(from: .now, by: 1)) { context in
