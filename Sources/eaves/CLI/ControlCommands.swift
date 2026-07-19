@@ -21,7 +21,8 @@ func statusCommand() -> Never {
         if let s = resp.summary { print("summary:   \(s)") }
         for row in resp.sessions ?? [] {
             let age = row.ageSeconds < 120 ? "\(row.ageSeconds)s" : "\(row.ageSeconds / 60)m"
-            print("  [\(row.state)] \(row.project) — \(row.activity) (\(age) ago, \(row.id.prefix(8)))")
+            let model = row.model.map { " [\($0)]" } ?? ""
+            print("  [\(row.state)] \(row.project)\(model) — \(row.activity) (\(age) ago, \(row.id.prefix(8)))")
         }
         if (resp.sessions ?? []).isEmpty { print("  (no sessions)") }
         exit(0)

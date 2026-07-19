@@ -63,7 +63,8 @@ final class EavesCore {
                 sessions: store.rows().map {
                     WireSessionInfo(
                         id: $0.id, project: $0.project, source: $0.source,
-                        state: $0.state.rawValue, activity: $0.activity,
+                        model: $0.model, state: $0.state.rawValue,
+                        activity: $0.activity,
                         ageSeconds: Int(now.timeIntervalSince($0.lastEvent)))
                 },
                 version: eavesVersion)

@@ -20,6 +20,13 @@ enum HookCommand {
         let forcedNotificationType = flag("--notification-type")
 
         let stdin = FileHandle.standardInput.readDataToEndOfFile()
+        // Keep the last raw payload per event around for schema debugging
+        // (new tools, new fields) — tiny, local, overwritten constantly.
+        if let event = eventFromArgv {
+            let dir = eavesDirectory().appendingPathComponent("last-payloads")
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? stdin.prefix(4096).write(to: dir.appendingPathComponent("\(event).json"))
+        }
         guard let obj = try? JSONSerialization.jsonObject(with: stdin) as? [String: Any],
               // Cursor sends conversation_id instead of session_id
               let sessionID = obj["session_id"] as? String
@@ -48,6 +55,33 @@ enum HookCommand {
         // Cursor sends workspace_roots instead of cwd on some events
         let cwd = obj["cwd"] as? String
             ?? (obj["workspace_roots"] as? [String])?.first
+
+        // Model: Codex/Cursor payloads carry it directly; Claude Code's
+        // don't, but its transcript JSONL records the model per message —
+        // read the tail and take the last occurrence. Best-effort, bounded.
+        var model = obj["model"] as? String ?? obj["model_id"] as? String
+        if model == nil, source == "claude",
+           let tp = obj["transcript_path"] as? String,
+           let handle = FileHandle(forReadingAtPath: tp) {
+            let size = (try? handle.seekToEnd()) ?? 0
+            let tailLen: UInt64 = 32_768
+            try? handle.seek(toOffset: size > tailLen ? size - tailLen : 0)
+            if let data = try? handle.readToEnd(),
+               let text = String(data: data, encoding: .utf8) {
+                // last "model":"..." wins (most recent message)
+                var searchRange = text.startIndex..<text.endIndex
+                var found: String?
+                while let r = text.range(of: #""model":""#, range: searchRange) {
+                    let rest = text[r.upperBound...]
+                    if let end = rest.firstIndex(of: "\"") {
+                        found = String(rest[..<end])
+                    }
+                    searchRange = r.upperBound..<text.endIndex
+                }
+                model = found
+            }
+            try? handle.close()
+        }
         var notificationType = forcedNotificationType ?? obj["notification_type"] as? String
         let message = obj["message"] as? String
         // Some payloads only carry the reason in `message`; sniff as a
@@ -77,7 +111,8 @@ enum HookCommand {
                 ?? toolInput?["query"] as? String),
             toolURL: clip(toolInput?["url"] as? String),
             notificationType: notificationType,
-            message: clip(message)
+            message: clip(message),
+            model: clip(model)
         )
         _ = try? SocketClient.request(req, timeoutMS: 150)
         exit(0)

@@ -15,6 +15,7 @@ struct WireRequest: Codable {
     var toolURL: String?
     var notificationType: String?
     var message: String?
+    var model: String?
 
     enum CodingKeys: String, CodingKey {
         case cmd
@@ -30,6 +31,7 @@ struct WireRequest: Codable {
         case toolURL = "tool_url"
         case notificationType = "notification_type"
         case message
+        case model
     }
 }
 
@@ -37,12 +39,13 @@ struct WireSessionInfo: Codable {
     let id: String
     let project: String
     let source: String
+    let model: String?
     let state: String
     let activity: String
     let ageSeconds: Int
 
     enum CodingKeys: String, CodingKey {
-        case id, project, source, state, activity
+        case id, project, source, model, state, activity
         case ageSeconds = "age_s"
     }
 }

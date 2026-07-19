@@ -315,9 +315,20 @@ struct SessionRowView: View {
                 state: row.state == .idle ? .off : (row.state == .needsInput ? .needsInput : .working),
                 size: 13)
             VStack(alignment: .leading, spacing: 2) {
-                Text(row.project)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.9))
+                HStack(spacing: 6) {
+                    Text(row.project)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                    if let model = row.model {
+                        Text(model)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.45))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(
+                                Capsule().fill(.white.opacity(0.08)))
+                    }
+                }
                 Text(ActivityFormatter.truncate(row.activity, max: 60))
                     .font(.caption2.monospaced())
                     .foregroundStyle(.white.opacity(0.55))

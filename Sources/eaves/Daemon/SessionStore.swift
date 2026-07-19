@@ -30,6 +30,7 @@ struct SessionRow: Identifiable, Equatable, Sendable {
     let id: String
     let project: String
     let source: String          // originating tool ("claude", …)
+    let model: String?          // short display name, e.g. "fable-5"
     let state: SessionState
     let activity: String
     let lastEvent: Date
@@ -43,6 +44,20 @@ final class SessionStore {
         var cwd: String?
         var activity: String
         var source: String = "claude"
+        var model: String?
+    }
+
+    /// "claude-fable-5" → "fable-5", "gpt-5.2-codex" stays, strip dates.
+    static func shortModelName(_ raw: String) -> String {
+        var s = raw
+        for prefix in ["claude-", "models/"] where s.hasPrefix(prefix) {
+            s = String(s.dropFirst(prefix.count))
+        }
+        // trailing -YYYYMMDD date stamp
+        if let r = s.range(of: #"-20\d{6}$"#, options: .regularExpression) {
+            s = String(s[..<r.lowerBound])
+        }
+        return s
     }
 
     struct TTLs {
@@ -96,6 +111,7 @@ final class SessionStore {
         s.lastEvent = ts
         if let cwd = req.cwd { s.cwd = cwd }
         if let source = req.source { s.source = source }
+        if let model = req.model { s.model = Self.shortModelName(model) }
 
         switch event {
         case "UserPromptSubmit":
@@ -164,6 +180,7 @@ final class SessionStore {
                     id: id,
                     project: s.cwd.map { ($0 as NSString).lastPathComponent } ?? "?",
                     source: s.source,
+                    model: s.model,
                     state: s.state,
                     activity: s.activity,
                     lastEvent: s.lastEvent)
