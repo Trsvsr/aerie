@@ -88,8 +88,13 @@ struct CollapsedView: View {
         let wing: CGFloat = visible ? NotchGeometry.wingWidth : 0
         // When idle, run narrower AND shorter than the physical notch so the
         // flares and bottom corners tuck fully behind it instead of peeking out.
+        // When active, the height is safeAreaInsets.top + seamOffset — the
+        // hardware's true edge isn't exactly the reported inset and only the
+        // user can see the seam, so the offset is tunable in settings.
         let centerWidth = visible ? geometry.notchWidth : geometry.notchWidth - 44
-        let height = visible ? geometry.notchHeight : geometry.notchHeight - 10
+        let height = visible
+            ? geometry.notchHeight + CGFloat(hud.settings.seamOffset)
+            : geometry.notchHeight - 10
         HStack(spacing: 0) {
             // left wing: logo of the top-priority session's tool.
             // The side wall is inset 8pt by the top flare, so center within
@@ -127,11 +132,7 @@ struct CollapsedView: View {
         }
         .frame(height: height)
         .background(
-            NotchShape(
-                topRadius: 8, bottomRadius: 12,
-                // keep the step-up strictly behind the hardware edge
-                centerCutoutWidth: (visible && geometry.hasNotch) ? geometry.notchWidth - 16 : 0
-            ).fill(.black)
+            NotchShape(topRadius: 8, bottomRadius: 12).fill(.black)
         )
         .contentShape(Rectangle())
         .animation(.spring(duration: 0.35, bounce: 0.25), value: visible)
@@ -245,6 +246,16 @@ struct SettingsPane: View {
                 Toggle("Expand on hover", isOn: $settings.hoverToExpand)
                 Toggle("Open from notch when idle", isOn: $settings.expandWhenIdle)
                 Toggle("Hide in fullscreen apps", isOn: $settings.hideInFullscreen)
+                HStack(spacing: 8) {
+                    Text("Notch seam")
+                    Stepper(
+                        "\(settings.seamOffset) pt",
+                        value: $settings.seamOffset, in: -6...4)
+                        .fixedSize()
+                    Text("adjust until the widget meets the notch edge")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.white.opacity(0.3))
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
