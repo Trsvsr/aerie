@@ -127,7 +127,11 @@ struct CollapsedView: View {
         }
         .frame(height: height)
         .background(
-            NotchShape(topRadius: 8, bottomRadius: 12).fill(.black)
+            NotchShape(
+                topRadius: 8, bottomRadius: 12,
+                // keep the step-up strictly behind the hardware edge
+                centerCutoutWidth: (visible && geometry.hasNotch) ? geometry.notchWidth - 16 : 0
+            ).fill(.black)
         )
         .contentShape(Rectangle())
         .animation(.spring(duration: 0.35, bounce: 0.25), value: visible)
@@ -327,9 +331,15 @@ struct SessionRowView: View {
 /// The notch silhouette: concave top corners (the S-curve flaring into the
 /// bezel) and convex rounded bottom corners. The body sits inset by
 /// `topRadius` on each side; the top edge spans the full rect width.
+/// `centerCutoutWidth` raises the bottom edge by `centerCutoutInset` across
+/// the middle span — used to keep the pill's center tucked behind the
+/// physical notch (whose real edge isn't pixel-exactly safeAreaInsets.top)
+/// so no black hairline peeks below the hardware.
 struct NotchShape: Shape {
     var topRadius: CGFloat = 8
     var bottomRadius: CGFloat = 12
+    var centerCutoutWidth: CGFloat = 0
+    var centerCutoutInset: CGFloat = 3
 
     func path(in rect: CGRect) -> Path {
         var p = Path()
@@ -345,6 +355,15 @@ struct NotchShape: Shape {
         p.addQuadCurve(
             to: CGPoint(x: rect.minX + topRadius + bottomRadius, y: rect.maxY),
             control: CGPoint(x: rect.minX + topRadius, y: rect.maxY))
+        if centerCutoutWidth > 0 {
+            // bottom edge steps up behind the physical notch (hidden by it)
+            let cutStart = rect.midX - centerCutoutWidth / 2
+            let cutEnd = rect.midX + centerCutoutWidth / 2
+            p.addLine(to: CGPoint(x: cutStart, y: rect.maxY))
+            p.addLine(to: CGPoint(x: cutStart, y: rect.maxY - centerCutoutInset))
+            p.addLine(to: CGPoint(x: cutEnd, y: rect.maxY - centerCutoutInset))
+            p.addLine(to: CGPoint(x: cutEnd, y: rect.maxY))
+        }
         // bottom edge
         p.addLine(to: CGPoint(x: rect.maxX - topRadius - bottomRadius, y: rect.maxY))
         // convex bottom-right corner
