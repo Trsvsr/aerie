@@ -342,51 +342,55 @@ struct SessionRowView: View {
 /// The notch silhouette: concave top corners (the S-curve flaring into the
 /// bezel) and convex rounded bottom corners. The body sits inset by
 /// `topRadius` on each side; the top edge spans the full rect width.
-/// `centerCutoutWidth` raises the bottom edge by `centerCutoutInset` across
-/// the middle span — used to keep the pill's center tucked behind the
-/// physical notch (whose real edge isn't pixel-exactly safeAreaInsets.top)
-/// so no black hairline peeks below the hardware.
 struct NotchShape: Shape {
     var topRadius: CGFloat = 8
     var bottomRadius: CGFloat = 12
-    var centerCutoutWidth: CGFloat = 0
-    var centerCutoutInset: CGFloat = 3
 
     func path(in rect: CGRect) -> Path {
         var p = Path()
+        let r = bottomRadius
+        // Bottom corners, tuned against photos of the hardware notch: the
+        // real corners are tight — a quick ~r turn with only a whisper of
+        // easing, not a long squircle sprawl. Keep two cubics for the
+        // continuous curvature but confine them to ~1.05r.
+        let ext = r * 1.05
+        let lx = rect.minX + topRadius     // left wall x
+        let rx = rect.maxX - topRadius     // right wall x
+
         // top-left, at the bezel
         p.move(to: CGPoint(x: rect.minX, y: rect.minY))
         // concave curve inward: bezel → side wall
         p.addQuadCurve(
-            to: CGPoint(x: rect.minX + topRadius, y: rect.minY + topRadius),
-            control: CGPoint(x: rect.minX + topRadius, y: rect.minY))
-        // left wall down
-        p.addLine(to: CGPoint(x: rect.minX + topRadius, y: rect.maxY - bottomRadius))
-        // convex bottom-left corner
-        p.addQuadCurve(
-            to: CGPoint(x: rect.minX + topRadius + bottomRadius, y: rect.maxY),
-            control: CGPoint(x: rect.minX + topRadius, y: rect.maxY))
-        if centerCutoutWidth > 0 {
-            // bottom edge steps up behind the physical notch (hidden by it)
-            let cutStart = rect.midX - centerCutoutWidth / 2
-            let cutEnd = rect.midX + centerCutoutWidth / 2
-            p.addLine(to: CGPoint(x: cutStart, y: rect.maxY))
-            p.addLine(to: CGPoint(x: cutStart, y: rect.maxY - centerCutoutInset))
-            p.addLine(to: CGPoint(x: cutEnd, y: rect.maxY - centerCutoutInset))
-            p.addLine(to: CGPoint(x: cutEnd, y: rect.maxY))
-        }
+            to: CGPoint(x: lx, y: rect.minY + topRadius),
+            control: CGPoint(x: lx, y: rect.minY))
+        // left wall down to where the corner easing begins
+        p.addLine(to: CGPoint(x: lx, y: rect.maxY - ext))
+        // bottom-left corner: wall → bottom edge, tight turn
+        p.addCurve(
+            to: CGPoint(x: lx + r * 0.5, y: rect.maxY - r * 0.13),
+            control1: CGPoint(x: lx, y: rect.maxY - r * 0.45),
+            control2: CGPoint(x: lx + r * 0.15, y: rect.maxY - r * 0.27))
+        p.addCurve(
+            to: CGPoint(x: lx + ext, y: rect.maxY),
+            control1: CGPoint(x: lx + r * 0.75, y: rect.maxY - r * 0.03),
+            control2: CGPoint(x: lx + r * 0.9, y: rect.maxY))
         // bottom edge
-        p.addLine(to: CGPoint(x: rect.maxX - topRadius - bottomRadius, y: rect.maxY))
-        // convex bottom-right corner
-        p.addQuadCurve(
-            to: CGPoint(x: rect.maxX - topRadius, y: rect.maxY - bottomRadius),
-            control: CGPoint(x: rect.maxX - topRadius, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rx - ext, y: rect.maxY))
+        // bottom-right corner: bottom edge → wall, tight turn
+        p.addCurve(
+            to: CGPoint(x: rx - r * 0.5, y: rect.maxY - r * 0.13),
+            control1: CGPoint(x: rx - r * 0.9, y: rect.maxY),
+            control2: CGPoint(x: rx - r * 0.75, y: rect.maxY - r * 0.03))
+        p.addCurve(
+            to: CGPoint(x: rx, y: rect.maxY - ext),
+            control1: CGPoint(x: rx - r * 0.15, y: rect.maxY - r * 0.27),
+            control2: CGPoint(x: rx, y: rect.maxY - r * 0.45))
         // right wall up
-        p.addLine(to: CGPoint(x: rect.maxX - topRadius, y: rect.minY + topRadius))
+        p.addLine(to: CGPoint(x: rx, y: rect.minY + topRadius))
         // concave curve outward: side wall → bezel
         p.addQuadCurve(
             to: CGPoint(x: rect.maxX, y: rect.minY),
-            control: CGPoint(x: rect.maxX - topRadius, y: rect.minY))
+            control: CGPoint(x: rx, y: rect.minY))
         p.closeSubpath()
         return p
     }
