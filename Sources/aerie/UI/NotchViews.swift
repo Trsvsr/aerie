@@ -84,7 +84,6 @@ struct CollapsedView: View {
         // the size of the physical notch — invisible, black on black. Activity
         // springs the wings outward, so the notch appears to grow sideways.
         let visible = hud.isVisible
-        let wing: CGFloat = visible ? NotchGeometry.wingWidth : 0
         // When idle, run narrower AND shorter than the physical notch so the
         // flares and bottom corners tuck fully behind it instead of peeking out.
         // When active, the height is safeAreaInsets.top + seamOffset — the
@@ -100,6 +99,11 @@ struct CollapsedView: View {
             .map(\.source)
             .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
             .prefix(3))
+        // Wings widen with the badge stack: each extra badge adds its width
+        // minus the overlap (11 - 3 = 8pt). Both wings grow symmetrically so
+        // the pill stays centered under the notch.
+        let stackExtra = CGFloat(max(activeSources.count - 1, 0)) * 8
+        let wingWidth = NotchGeometry.wingWidth + stackExtra
         HStack(spacing: 0) {
             // left wing: overlapped badge stack of every running tool.
             // The side wall is inset 8pt by the top flare, so center within
@@ -127,7 +131,7 @@ struct CollapsedView: View {
                 Spacer(minLength: 0)
             }
             .padding(.leading, 8)
-            .frame(width: geometry.hasNotch ? wing : NotchGeometry.wingWidth)
+            .frame(width: geometry.hasNotch ? (visible ? wingWidth : 0) : wingWidth)
             .clipped()
             .opacity(visible ? 1 : 0)
 
@@ -153,7 +157,7 @@ struct CollapsedView: View {
                 Spacer(minLength: 0)
             }
             .padding(.trailing, 8)
-            .frame(width: geometry.hasNotch ? wing : NotchGeometry.wingWidth)
+            .frame(width: geometry.hasNotch ? (visible ? wingWidth : 0) : wingWidth)
             .clipped()
             .opacity(visible ? 1 : 0)
         }
