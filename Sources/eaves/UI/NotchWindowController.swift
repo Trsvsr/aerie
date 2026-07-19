@@ -16,13 +16,12 @@ struct NotchGeometry: Equatable {
     static func detect(on screen: NSScreen) -> NotchGeometry {
         if screen.safeAreaInsets.top > 0,
            let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
-            // safeAreaInsets.top can under-report by a point (38 vs a 39pt
-            // menu-bar row); the physical notch reaches the bottom of the
-            // menu bar, so take the taller of the two.
-            let menuBarHeight = screen.frame.maxY - screen.visibleFrame.maxY
+            // safeAreaInsets.top matches the physical notch (38pt here). The
+            // menu-bar row is 1pt taller — that thin sliver of menu bar
+            // showing under the notch is real; don't paint over it.
             return NotchGeometry(
                 notchWidth: screen.frame.width - left.width - right.width,
-                notchHeight: max(screen.safeAreaInsets.top, menuBarHeight),
+                notchHeight: screen.safeAreaInsets.top,
                 hasNotch: true)
         }
         // Fallback pill under the menu bar line on notchless screens.
