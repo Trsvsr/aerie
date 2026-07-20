@@ -202,28 +202,32 @@ final class NotchWindowController {
     /// when idle with expand-when-idle on — just the notch footprint.
     private func currentInteractiveRect() -> NSRect {
         if hud.isExpanded {
+            // only the card's actual rendered height — the panel window is
+            // taller, and a full-panel rect swallows clicks below the card
+            let cardHeight = min(max(hud.expandedContentHeight, 60), NotchGeometry.panelHeight)
             return NSRect(
-                x: 0, y: 0,
-                width: NotchGeometry.panelWidth, height: NotchGeometry.panelHeight)
+                x: 0, y: NotchGeometry.panelHeight - cardHeight,
+                width: NotchGeometry.panelWidth, height: cardHeight)
         }
-        // Forgiving slop: the pill hugs the screen's top edge, so clicks
-        // naturally land a little wide or below it — accept those too.
+        // Side slop only: clicks a little wide of the pill still count, but
+        // no bottom slop — the pill ends ~1pt above the menu bar's bottom
+        // edge, so any downward slop reaches into app content below the
+        // menu bar and EATS real clicks meant for other windows.
         let sideSlop: CGFloat = 8
-        let bottomSlop: CGFloat = 12
         if hud.isVisible {
             return NSRect(
                 x: (NotchGeometry.panelWidth - geometry.collapsedWidth) / 2 - sideSlop,
-                y: NotchGeometry.panelHeight - geometry.notchHeight - bottomSlop,
+                y: NotchGeometry.panelHeight - geometry.notchHeight,
                 width: geometry.collapsedWidth + 2 * sideSlop,
-                height: geometry.notchHeight + bottomSlop)
+                height: geometry.notchHeight)
         }
         if hud.settings.expandWhenIdle, geometry.hasNotch {
-            // idle: the physical notch itself is the hover/click target
+            // idle: exactly the physical notch footprint — never below it
             return NSRect(
-                x: (NotchGeometry.panelWidth - geometry.notchWidth) / 2 - sideSlop,
-                y: NotchGeometry.panelHeight - geometry.notchHeight - bottomSlop,
-                width: geometry.notchWidth + 2 * sideSlop,
-                height: geometry.notchHeight + bottomSlop)
+                x: (NotchGeometry.panelWidth - geometry.notchWidth) / 2,
+                y: NotchGeometry.panelHeight - geometry.notchHeight,
+                width: geometry.notchWidth,
+                height: geometry.notchHeight)
         }
         return .zero
     }

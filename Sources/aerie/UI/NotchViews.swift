@@ -297,6 +297,10 @@ struct ExpandedView: View {
             // through the top strip and the card stops reading as the notch
             NotchShape(topRadius: 10, bottomRadius: 18).fill(.black)
         )
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+            // hit area must track the card, not the full panel window
+            hud.expandedContentHeight = height
+        }
     }
 }
 

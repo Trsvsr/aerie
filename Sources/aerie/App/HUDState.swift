@@ -15,6 +15,9 @@ final class HUDState {
     /// Setup wizard pane visible (first run, or opened from settings).
     /// Takes precedence over showSettings while true.
     var showWizard = false
+    /// Rendered height of the expanded card, reported by the view — the
+    /// interactive hit area must match the card, not the full panel window.
+    var expandedContentHeight: CGFloat = 0
 
     /// Ephemeral "just finished" presentation: shown for ~5s after a session
     /// transitions working/needsInput → idle (or ends), before the pill
