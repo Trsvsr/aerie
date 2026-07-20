@@ -5,7 +5,9 @@
 Agent status in the MacBook notch — an aerie is an eagle's nest built high
 on a cliff face, which is where your agents now roost, watching.
 
-![aerie demo](docs/aerie-demo.gif)
+<p align="center">
+  <img src="docs/aerie-demo.gif" alt="aerie demo" width="740">
+</p>
 
 aerie watches every AI coding agent running on your machine — **Claude Code,
 Codex CLI, Antigravity CLI, Cursor, opencode, and Pi** — and lives in the
@@ -101,24 +103,6 @@ aerie status
 After rebuilding while the app runs: `rm ~/.local/bin/aerie && cp ...` —
 overwriting a running binary in place gets subsequent hook invocations
 killed by code-signature invalidation.
-
-## Notch geometry notes (hard-won)
-
-- `NSPanel.isFloatingPanel`'s setter resets `level`; set `level` after it,
-  or the panel sits under the menu bar and never receives clicks.
-- The physical notch height is `safeAreaInsets.top` (38 pt here); the menu
-  bar is 1 pt taller, and that sliver of menu bar under the notch is real —
-  don't paint over it. The hardware edge can sit on a *half-point*
-  boundary; the seam offset is tunable in 0.5 pt steps from settings.
-- `safeAreaInsets.top` reads **0 inside fullscreen spaces** — cache the
-  geometry or a mid-fullscreen reposition rebuilds you as a notchless
-  pill.
-- Corner radii: 8 / 12 with tight two-cubic curvature, tuned against
-  photos of the hardware (screenshots can't capture the notch — the
-  framebuffer extends behind it).
-- Keep the interactive hit area exactly on the visible widget. Slop below
-  the pill or a hit rect taller than the expanded card silently eats
-  clicks meant for other apps' windows.
 
 ## Notes
 
