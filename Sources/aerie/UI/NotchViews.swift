@@ -122,11 +122,13 @@ struct CollapsedView: View {
                             .foregroundStyle(.green)
                         SourceBadge(source: linger.source, state: .off, size: 11)
                     }
+                    .transition(.scale(scale: 0.4).combined(with: .opacity))
                 } else if activeSources.isEmpty {
                     SourceBadge(
                         source: hud.displayRows.first?.source ?? "claude",
                         state: hud.displayAggregate,
                         size: 13)
+                        .transition(.opacity)
                 } else {
                     HStack(spacing: -3) {
                         ForEach(Array(activeSources.enumerated()), id: \.element) { i, source in
@@ -139,9 +141,13 @@ struct CollapsedView: View {
                                 .zIndex(Double(activeSources.count - i))
                         }
                     }
+                    .transition(.opacity)
                 }
                 Spacer(minLength: 0)
             }
+            // animate content swaps (badges ↔ checkmark), not just width
+            .animation(.spring(duration: 0.35, bounce: 0.3), value: showsLinger)
+            .animation(.default, value: activeSources)
             .padding(.leading, 8)
             .frame(width: geometry.hasNotch ? (visible ? wingWidth : 0) : wingWidth)
             .clipped()
@@ -161,6 +167,7 @@ struct CollapsedView: View {
                     Text(compactDurationText(linger.duration))
                         .font(.caption2.monospacedDigit().weight(.semibold))
                         .foregroundStyle(.green.opacity(0.9))
+                        .transition(.scale(scale: 0.4).combined(with: .opacity))
                 } else if blocked > 0, hud.displayRows.count > 1 {
                     Text("\(blocked)!")
                         .font(.caption2.monospacedDigit().weight(.bold))
@@ -178,6 +185,7 @@ struct CollapsedView: View {
                 }
                 Spacer(minLength: 0)
             }
+            .animation(.spring(duration: 0.35, bounce: 0.3), value: showsLinger)
             .padding(.trailing, 8)
             .frame(width: geometry.hasNotch ? (visible ? wingWidth : 0) : wingWidth)
             .clipped()
