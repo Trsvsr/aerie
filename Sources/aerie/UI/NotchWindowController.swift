@@ -43,6 +43,7 @@ final class NotchWindowController {
     private var geometry = NotchGeometry(notchWidth: 180, notchHeight: 32, hasNotch: false)
     private var globalClickMonitor: Any?
     private var localMonitor: Any?
+    private var mouseMoveMonitors: [Any] = []
     private var screenObserver: Any?
     private var fullscreenObservers: [Any] = []
     private var fullscreenPollTimer: Timer?
@@ -66,7 +67,45 @@ final class NotchWindowController {
             MainActor.assumeIsolated { self?.reposition() }
         }
         startFullscreenWatch()
+        startMouseTracking()
         withObservationTracking()
+    }
+
+    // MARK: cursor-driven mouse pass-through
+
+    /// The window must ignore mouse events BY DEFAULT: with
+    /// ignoresMouseEvents=false the window server routes every click in our
+    /// 520×380 frame to us first, and hitTest→nil only *discards* it — it
+    /// never falls through to the app below. So we flip interactivity on
+    /// exactly while the cursor is over the pill/card, and off otherwise.
+    private func startMouseTracking() {
+        let handler: (NSEvent) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateMousePassThrough() }
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(
+            matching: [.mouseMoved], handler: handler) {
+            mouseMoveMonitors.append(global)
+        }
+        mouseMoveMonitors.append(NSEvent.addLocalMonitorForEvents(
+            matching: [.mouseMoved]) { event in
+            handler(event)
+            return event
+        } as Any)
+    }
+
+    private func updateMousePassThrough() {
+        guard let panel else { return }
+        let rect = currentInteractiveRect()
+        guard rect != .zero else {
+            panel.ignoresMouseEvents = true
+            return
+        }
+        // interactive rect is in window coords (origin bottom-left)
+        let screenRect = NSRect(
+            x: panel.frame.minX + rect.minX,
+            y: panel.frame.minY + rect.minY,
+            width: rect.width, height: rect.height)
+        panel.ignoresMouseEvents = !screenRect.contains(NSEvent.mouseLocation)
     }
 
     // MARK: fullscreen detection
@@ -237,10 +276,9 @@ final class NotchWindowController {
         let visible = hud.isVisible
         _ = hud.isExpanded  // establish observation dependency
 
-        // stay interactive while idle if the notch is an expand target
-        panel.ignoresMouseEvents = !visible
-            && !hud.isExpanded
-            && !(hud.settings.expandWhenIdle && geometry.hasNotch)
+        // Pass-through is cursor-driven (updateMousePassThrough); here we
+        // only refresh it for the current pointer position on state changes.
+        updateMousePassThrough()
         if geometry.hasNotch {
             // The collapsed shape hides behind the physical notch when idle
             // (wings animate to zero width in SwiftUI) — no window fade.
