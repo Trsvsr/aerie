@@ -5,8 +5,11 @@ struct Snapshot: Sendable {
     let aggregate: AggregateState
     let summary: String?
     let rows: [SessionRow]
+    let recents: [RecentSession]
+    let lastSeenBySource: [String: Date]
 
-    static let empty = Snapshot(aggregate: .off, summary: nil, rows: [])
+    static let empty = Snapshot(
+        aggregate: .off, summary: nil, rows: [], recents: [], lastSeenBySource: [:])
 }
 
 /// Composition root shared by `app` and `--headless`: owns the SessionStore
@@ -67,6 +70,7 @@ final class AerieCore {
                         activity: $0.activity,
                         ageSeconds: Int(now.timeIntervalSince($0.lastEvent)))
                 },
+                lastSeenBySource: store.lastSeenBySource.mapValues { $0.timeIntervalSince1970 },
                 version: aerieVersion)
         case "reset":
             store.reset()
@@ -84,6 +88,8 @@ final class AerieCore {
         onSnapshot?(Snapshot(
             aggregate: store.aggregate(),
             summary: store.summary(),
-            rows: store.rows()))
+            rows: store.rows(),
+            recents: store.recents,
+            lastSeenBySource: store.lastSeenBySource))
     }
 }

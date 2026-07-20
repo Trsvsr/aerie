@@ -37,6 +37,18 @@ struct SessionRow: Identifiable, Equatable, Sendable {
     let firstEvent: Date
 }
 
+/// A finished session, kept briefly for the "recent" panel section.
+/// Summary only — no commands, prompts, or transcripts.
+struct RecentSession: Identifiable, Equatable, Sendable {
+    let id: String
+    let project: String
+    let source: String
+    let model: String?
+    let endedAt: Date
+    let duration: TimeInterval
+    let finalActivity: String
+}
+
 /// Pure per-session state machine + aggregation. No I/O; clock injected for tests.
 final class SessionStore {
     struct Session {
@@ -69,6 +81,12 @@ final class SessionStore {
     }
 
     private(set) var sessions: [String: Session] = [:]
+    /// Newest-first ring of ended sessions (SessionEnd or working→idle
+    /// completion), capped at `recentsCap`.
+    private(set) var recents: [RecentSession] = []
+    var recentsCap = 20
+    /// Timestamp of the last event seen per source — integration health.
+    private(set) var lastSeenBySource: [String: Date] = [:]
     var ttls = TTLs()
     let now: () -> Date
 
@@ -93,9 +111,13 @@ final class SessionStore {
     func apply(_ req: WireRequest) {
         guard let sessionID = req.sessionID, let event = req.event else { return }
         let ts = now()
+        lastSeenBySource[req.source ?? sessions[sessionID]?.source ?? "claude"] = ts
 
         switch event {
         case "SessionEnd":
+            if let s = sessions[sessionID] {
+                pushRecent(id: sessionID, s, endedAt: ts)
+            }
             sessions[sessionID] = nil
             return
         case "SessionStart":
@@ -158,11 +180,24 @@ final class SessionStore {
                 demoted.activity = "stale"
                 sessions[id] = demoted
             case .idle where age > ttls.idle:
+                pushRecent(id: id, s, endedAt: s.lastEvent)
                 sessions[id] = nil
             default:
                 break
             }
         }
+    }
+
+    private func pushRecent(id: String, _ s: Session, endedAt: Date) {
+        recents.insert(RecentSession(
+            id: id,
+            project: s.cwd.map { ($0 as NSString).lastPathComponent } ?? "?",
+            source: s.source,
+            model: s.model,
+            endedAt: endedAt,
+            duration: endedAt.timeIntervalSince(s.firstEvent),
+            finalActivity: s.activity), at: 0)
+        if recents.count > recentsCap { recents.removeLast(recents.count - recentsCap) }
     }
 
     func aggregate() -> AggregateState {

@@ -12,6 +12,7 @@ usage:
   aerie install [--dry-run]         install LaunchAgent + Claude Code hooks
   aerie uninstall                   remove LaunchAgent + hooks
   aerie status                      show live sessions
+  aerie doctor                      check each integration's health
   aerie send --session ID --event NAME [...]   inject a fake event
   aerie reset | quit
 """
@@ -68,6 +69,8 @@ case "uninstall":
 
 case "status":
     statusCommand()
+case "doctor":
+    DoctorCommand.run()
 case "reset":
     controlRequest(WireRequest(cmd: "reset"))
 case "quit":

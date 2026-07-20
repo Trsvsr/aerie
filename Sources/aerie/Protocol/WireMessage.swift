@@ -56,7 +56,14 @@ struct WireResponse: Codable {
     var aggregate: String?
     var summary: String?
     var sessions: [WireSessionInfo]?
+    /// source → unix epoch of last event seen (doctor/health)
+    var lastSeenBySource: [String: Double]?
     var version: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok, error, aggregate, summary, sessions, version
+        case lastSeenBySource = "last_seen_by_source"
+    }
 }
 
 let aerieVersion = "0.1.0"

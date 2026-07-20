@@ -16,6 +16,20 @@ final class HUDState {
     /// Takes precedence over showSettings while true.
     var showWizard = false
 
+    /// Ephemeral "just finished" presentation: shown for ~5s after a session
+    /// transitions working/needsInput → idle (or ends), before the pill
+    /// tucks away. Closes the "did it finish or die?" loop.
+    struct Completion: Equatable {
+        let project: String
+        let source: String
+        let duration: TimeInterval
+    }
+    var lingering: Completion?
+    private var lingerTask: Task<Void, Never>?
+    /// Previous snapshot's per-session states, for transition detection.
+    private var priorStates: [String: SessionState] = [:]
+    private var priorFirstEvents: [String: Date] = [:]
+
     let settings: AerieSettings
 
     init(settings: AerieSettings) {
@@ -38,11 +52,47 @@ final class HUDState {
         }
     }
 
-    var isVisible: Bool { displayAggregate != .off }
+    /// Pill shows while any session is active OR a completion is lingering.
+    var isVisible: Bool { displayAggregate != .off || lingering != nil }
 
     func apply(_ snap: Snapshot) {
+        detectCompletions(snap)
         snapshot = snap
         // Note: going idle no longer force-collapses — the panel is
         // reachable (and useful, via settings) while idle.
+    }
+
+    private func detectCompletions(_ snap: Snapshot) {
+        let visibleRows = snap.rows.filter { settings.isEnabled($0.source) }
+        // a session completed if it was active before and is now idle or gone
+        for (id, oldState) in priorStates where oldState != .idle {
+            let newRow = visibleRows.first { $0.id == id }
+            if newRow == nil || newRow?.state == .idle {
+                let ended = newRow ?? snap.recents.first { $0.id == id }.map {
+                    SessionRow(id: $0.id, project: $0.project, source: $0.source,
+                               model: $0.model, state: .idle, activity: $0.finalActivity,
+                               lastEvent: $0.endedAt,
+                               firstEvent: $0.endedAt.addingTimeInterval(-$0.duration))
+                }
+                guard let ended else { continue }
+                showLinger(Completion(
+                    project: ended.project,
+                    source: ended.source,
+                    duration: Date().timeIntervalSince(
+                        priorFirstEvents[id] ?? ended.firstEvent)))
+            }
+        }
+        priorStates = Dictionary(uniqueKeysWithValues: visibleRows.map { ($0.id, $0.state) })
+        priorFirstEvents = Dictionary(uniqueKeysWithValues: visibleRows.map { ($0.id, $0.firstEvent) })
+    }
+
+    private func showLinger(_ c: Completion) {
+        lingerTask?.cancel()
+        lingering = c
+        lingerTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            lingering = nil
+        }
     }
 }

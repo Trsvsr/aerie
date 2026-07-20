@@ -110,7 +110,15 @@ struct CollapsedView: View {
             // the visible wing (wall → notch), not the full frame.
             HStack {
                 Spacer(minLength: 0)
-                if activeSources.isEmpty {
+                if let linger = hud.lingering, activeSources.isEmpty {
+                    // completion linger: green check + the finished tool
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.green)
+                        SourceBadge(source: linger.source, state: .off, size: 11)
+                    }
+                } else if activeSources.isEmpty {
                     SourceBadge(
                         source: hud.displayRows.first?.source ?? "claude",
                         state: hud.displayAggregate,
@@ -140,10 +148,20 @@ struct CollapsedView: View {
                 Spacer().frame(width: max(centerWidth, 0))
             }
 
-            // right wing: solo session → running duration; fleet → count
+            // right wing: linger → final duration; blocked sessions → "N!";
+            // solo → running duration; fleet → count
             HStack {
                 Spacer(minLength: 0)
-                if hud.displayRows.count == 1, let solo = hud.displayRows.first {
+                let blocked = hud.displayRows.filter { $0.state == .needsInput }.count
+                if let linger = hud.lingering, hud.displayAggregate == .off {
+                    Text(compactDurationText(linger.duration))
+                        .font(.caption2.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.green.opacity(0.9))
+                } else if blocked > 0, hud.displayRows.count > 1 {
+                    Text("\(blocked)!")
+                        .font(.caption2.monospacedDigit().weight(.bold))
+                        .foregroundStyle(.red)
+                } else if hud.displayRows.count == 1, let solo = hud.displayRows.first {
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         Text(compactDuration(from: solo.firstEvent, to: context.date))
                             .font(.caption2.monospacedDigit().weight(.semibold))
@@ -173,7 +191,11 @@ struct CollapsedView: View {
 
     /// "47s", "4m", "1h12m" — coarse on purpose; the pill isn't a stopwatch.
     private func compactDuration(from start: Date, to now: Date) -> String {
-        let s = max(0, Int(now.timeIntervalSince(start)))
+        compactDurationText(now.timeIntervalSince(start))
+    }
+
+    private func compactDurationText(_ interval: TimeInterval) -> String {
+        let s = max(0, Int(interval))
         if s < 60 { return "\(s)s" }
         if s < 3600 { return "\(s / 60)m" }
         return "\(s / 3600)h\((s % 3600) / 60)m"
@@ -226,6 +248,7 @@ struct ExpandedView: View {
                         ForEach(hud.displayRows) { row in
                             SessionRowView(row: row)
                         }
+                        RecentsSection(hud: hud)
                     }
                     .padding(.vertical, 6)
                 }
@@ -270,6 +293,70 @@ struct ExpandedView: View {
             // through the top strip and the card stops reading as the notch
             NotchShape(topRadius: 10, bottomRadius: 18).fill(.black)
         )
+    }
+}
+
+/// Collapsed-by-default list of recently finished sessions.
+struct RecentsSection: View {
+    var hud: HUDState
+    @State private var open = false
+
+    private var recents: [RecentSession] {
+        hud.snapshot.recents.filter { hud.settings.isEnabled($0.source) }
+    }
+
+    var body: some View {
+        if !recents.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(.spring(duration: 0.25)) { open.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: open ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 8, weight: .semibold))
+                        Text("RECENT")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text("\(recents.count)")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.white.opacity(0.25))
+                        Spacer()
+                    }
+                    .foregroundStyle(.white.opacity(0.35))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 30)
+                .padding(.vertical, 6)
+
+                if open {
+                    ForEach(recents.prefix(8)) { r in
+                        HStack(spacing: 10) {
+                            SourceBadge(source: r.source, state: .off, size: 11)
+                            Text(r.project)
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.white.opacity(0.5))
+                            Text(r.finalActivity)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.3))
+                                .lineLimit(1)
+                            Spacer()
+                            Text(durationLabel(r.duration))
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.3))
+                        }
+                        .padding(.horizontal, 30)
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+        }
+    }
+
+    private func durationLabel(_ t: TimeInterval) -> String {
+        let s = max(0, Int(t))
+        if s < 60 { return "\(s)s" }
+        if s < 3600 { return "\(s / 60)m" }
+        return "\(s / 3600)h\((s % 3600) / 60)m"
     }
 }
 
