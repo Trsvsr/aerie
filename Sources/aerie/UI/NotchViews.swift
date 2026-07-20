@@ -99,11 +99,15 @@ struct CollapsedView: View {
             .map(\.source)
             .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
             .prefix(3))
-        // Wings widen with the badge stack: each extra badge adds its width
-        // minus the overlap (11 - 3 = 8pt). Both wings grow symmetrically so
-        // the pill stays centered under the notch.
+        // Wings widen with their content, symmetrically so the pill stays
+        // centered: each extra stacked badge adds its width minus overlap
+        // (11 - 3 = 8pt); the completion linger shows check + badge on the
+        // left and a duration like "1h12m" on the right, which need ~14pt
+        // beyond the single-badge baseline.
+        let showsLinger = hud.lingering != nil && activeSources.isEmpty
         let stackExtra = CGFloat(max(activeSources.count - 1, 0)) * 8
-        let wingWidth = NotchGeometry.wingWidth + stackExtra
+        let lingerExtra: CGFloat = showsLinger ? 14 : 0
+        let wingWidth = NotchGeometry.wingWidth + stackExtra + lingerExtra
         HStack(spacing: 0) {
             // left wing: overlapped badge stack of every running tool.
             // The side wall is inset 8pt by the top flare, so center within
