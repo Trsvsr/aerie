@@ -1,4 +1,4 @@
-# aerie
+<img src="docs/title.svg" alt="aerie" width="340">
 
 Agent status in the MacBook notch — an aerie is an eagle's nest built high
 on a cliff face, which is where your agents now roost, watching.
