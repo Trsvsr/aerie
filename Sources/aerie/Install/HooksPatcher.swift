@@ -92,7 +92,7 @@ enum HooksPatcher {
     private static func writeSettings(_ root: [String: Any], to url: URL) throws {
         let data = try JSONSerialization.data(
             withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
-        try data.write(to: url, options: .atomic)
+        try ConfigWriter.writeThroughSymlinks(data, to: url)
     }
 
     private static func backup(_ url: URL) throws {

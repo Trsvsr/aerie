@@ -23,9 +23,18 @@ enum HookCommand {
         // Keep the last raw payload per event around for schema debugging
         // (new tools, new fields) — tiny, local, overwritten constantly.
         if let event = eventFromArgv {
+            ensurePrivateAerieDirectory()
             let dir = aerieDirectory().appendingPathComponent("last-payloads")
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            try? stdin.prefix(4096).write(to: dir.appendingPathComponent("\(event).json"))
+            try? FileManager.default.createDirectory(
+                at: dir, withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700])
+            // createDirectory attributes don't retrofit an existing dir
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o700], ofItemAtPath: dir.path)
+            let dest = dir.appendingPathComponent("\(event).json")
+            try? stdin.prefix(4096).write(to: dest)
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o600], ofItemAtPath: dest.path)
         }
         guard let obj = try? JSONSerialization.jsonObject(with: stdin) as? [String: Any],
               // Cursor sends conversation_id instead of session_id

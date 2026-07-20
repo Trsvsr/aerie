@@ -72,6 +72,17 @@ func aerieDirectory() -> URL {
     FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".aerie")
 }
 
+/// Create ~/.aerie owner-only; tighten pre-existing dirs too. Payload
+/// snapshots and logs land here — no reason for group/other access.
+func ensurePrivateAerieDirectory() {
+    let dir = aerieDirectory()
+    try? FileManager.default.createDirectory(
+        at: dir, withIntermediateDirectories: true,
+        attributes: [.posixPermissions: 0o700])
+    try? FileManager.default.setAttributes(
+        [.posixPermissions: 0o700], ofItemAtPath: dir.path)
+}
+
 func socketPath() -> String {
     aerieDirectory().appendingPathComponent("daemon.sock").path
 }
@@ -85,7 +96,9 @@ func log(_ message: String) {
         h.write(Data(line.utf8))
         try? h.close()
     } else {
-        try? FileManager.default.createDirectory(at: aerieDirectory(), withIntermediateDirectories: true)
+        ensurePrivateAerieDirectory()
         try? Data(line.utf8).write(to: url)
     }
+    try? FileManager.default.setAttributes(
+        [.posixPermissions: 0o600], ofItemAtPath: url.path)
 }

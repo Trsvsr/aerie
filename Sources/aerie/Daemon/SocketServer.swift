@@ -5,7 +5,12 @@ import Foundation
 final class SocketServer {
     private var listenFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
+    /// Core queue: owns the store; handler runs here.
     private let queue: DispatchQueue
+    /// Accepts land here; each connection's read is dispatched concurrently
+    /// so one slow client can't delay others (or the core queue).
+    private let ioQueue = DispatchQueue(
+        label: "com.trevor.aerie.socket-io", attributes: .concurrent)
     private let handler: (WireRequest) -> WireResponse
 
     init(queue: DispatchQueue, handler: @escaping (WireRequest) -> WireResponse) {
@@ -26,8 +31,7 @@ final class SocketServer {
     }
 
     func start() throws {
-        let dir = aerieDirectory()
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        ensurePrivateAerieDirectory()
         let path = socketPath()
 
         if FileManager.default.fileExists(atPath: path) {
@@ -59,8 +63,10 @@ final class SocketServer {
         guard listen(listenFD, 16) == 0 else {
             throw ServerError.bindFailed("listen() failed")
         }
+        // owner-only socket (0700 dir already blocks others, defense in depth)
+        chmod(path, 0o600)
 
-        let src = DispatchSource.makeReadSource(fileDescriptor: listenFD, queue: queue)
+        let src = DispatchSource.makeReadSource(fileDescriptor: listenFD, queue: ioQueue)
         src.setEventHandler { [weak self] in self?.acceptOne() }
         src.resume()
         acceptSource = src
@@ -73,32 +79,57 @@ final class SocketServer {
         unlink(socketPath())
     }
 
+    /// Read a full request on the I/O queue; only a decoded request hops to
+    /// the core queue. A slow or hostile client can therefore never stall
+    /// the store, sweeps, or other clients' commands.
     private func acceptOne() {
         let fd = accept(listenFD, nil, nil)
         guard fd >= 0 else { return }
-        defer { close(fd) }
+        ioQueue.async { [weak self] in self?.readAndDispatch(fd) }
+    }
 
+    private func readAndDispatch(_ fd: Int32) {
         var tv = timeval(tv_sec: 1, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
 
+        // Hard limits: SO_RCVTIMEO alone is an *inactivity* timeout — a
+        // client trickling bytes resets it forever. Enforce a total
+        // deadline and a max request size regardless of read cadence.
+        let deadline = DispatchTime.now() + .seconds(3)
+        let maxRequest = 64 * 1024
+
         var data = Data()
         var buf = [UInt8](repeating: 0, count: 8192)
-        while !buf.isEmpty {
+        var complete = false
+        while DispatchTime.now() < deadline, data.count < maxRequest {
             let n = read(fd, &buf, buf.count)
             if n <= 0 { break }
             data.append(contentsOf: buf[0..<n])
-            if buf[0..<n].contains(0x0A) { break }
+            if buf[0..<n].contains(0x0A) { complete = true; break }
         }
 
-        var resp: WireResponse
-        if let req = try? JSONDecoder().decode(WireRequest.self, from: data) {
-            resp = handler(req)
-        } else {
-            resp = WireResponse(ok: false, error: "bad request")
+        // decode only the first line
+        if let nl = data.firstIndex(of: 0x0A) {
+            data = data.prefix(upTo: nl)
+            complete = true
         }
-        if var out = try? JSONEncoder().encode(resp) {
-            out.append(0x0A)
-            _ = out.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+
+        guard complete, let req = try? JSONDecoder().decode(WireRequest.self, from: data) else {
+            Self.respond(fd, WireResponse(ok: false, error: "bad request"))
+            close(fd)
+            return
         }
+        // handler (and the store it guards) runs on the core queue
+        queue.async { [weak self] in
+            let resp = self?.handler(req) ?? WireResponse(ok: false, error: "shutting down")
+            Self.respond(fd, resp)
+            close(fd)
+        }
+    }
+
+    private static func respond(_ fd: Int32, _ resp: WireResponse) {
+        guard var out = try? JSONEncoder().encode(resp) else { return }
+        out.append(0x0A)
+        _ = out.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
     }
 }

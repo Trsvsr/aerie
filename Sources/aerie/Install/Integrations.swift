@@ -150,7 +150,7 @@ enum ToolIntegration: String, CaseIterable {
             try script.write(to: configURL, atomically: true, encoding: .utf8)
             return true
         }
-        var root = readJSON(configURL)
+        var root = try readJSON(configURL)
         var hooks = root["hooks"] as? [String: Any] ?? [:]
         var changed = false
 
@@ -188,7 +188,7 @@ enum ToolIntegration: String, CaseIterable {
             try FileManager.default.removeItem(at: configURL)
             return true
         }
-        var root = readJSON(configURL)
+        var root = try readJSON(configURL)
         guard var hooks = root["hooks"] as? [String: Any] else { return false }
         var changed = false
         for (event, value) in hooks {
@@ -339,25 +339,39 @@ enum ToolIntegration: String, CaseIterable {
         }
     }
 
-    private func readJSON(_ url: URL) -> [String: Any] {
-        guard let data = try? Data(contentsOf: url) else { return [:] }
-        return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+    enum ConfigError: LocalizedError {
+        case unreadable(String)
+        case malformed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .unreadable(let p): return "cannot read \(p)"
+            case .malformed(let p):
+                return "\(p) is not valid JSON — fix or move it, then retry (aerie will not overwrite it)"
+            }
+        }
+    }
+
+    /// Missing file → empty config (fresh install). Unreadable or malformed
+    /// file → throw: silently treating a broken config as empty would make
+    /// install() overwrite the user's real configuration.
+    private func readJSON(_ url: URL) throws -> [String: Any] {
+        guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
+        guard let data = try? Data(contentsOf: url) else {
+            throw ConfigError.unreadable(url.path)
+        }
+        guard let obj = try? JSONSerialization.jsonObject(with: data),
+              let dict = obj as? [String: Any] else {
+            throw ConfigError.malformed(url.path)
+        }
+        return dict
     }
 
     private func writeJSON(_ root: [String: Any], to url: URL) throws {
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        // timestamped backup alongside, mirroring HooksPatcher's habit
-        if FileManager.default.fileExists(atPath: url.path) {
-            let df = DateFormatter()
-            df.dateFormat = "yyyyMMdd-HHmmss"
-            let backup = url.deletingLastPathComponent()
-                .appendingPathComponent("\(url.lastPathComponent).aerie-backup-\(df.string(from: Date()))")
-            try? FileManager.default.copyItem(at: url, to: backup)
-        }
+        ConfigWriter.backup(url, label: "aerie")
         let data = try JSONSerialization.data(
             withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
-        try data.write(to: url, options: .atomic)
+        try ConfigWriter.writeThroughSymlinks(data, to: url)
     }
 
     private func binaryOnPath(_ name: String) -> Bool {

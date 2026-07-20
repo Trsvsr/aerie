@@ -177,7 +177,10 @@ final class SessionStore {
                  .needsInput where age > ttls.needsInput:
                 var demoted = s
                 demoted.state = .idle
-                demoted.activity = "stale"
+                // keep the real last activity for recents; mark staleness
+                // in a way that still reads in the UI
+                demoted.activity = s.activity.isEmpty
+                    ? "stale" : "\(s.activity) (stale)"
                 sessions[id] = demoted
             case .idle where age > ttls.idle:
                 pushRecent(id: id, s, endedAt: s.lastEvent)
@@ -186,6 +189,9 @@ final class SessionStore {
                 break
             }
         }
+        // multiple reaps in one sweep insert out of dictionary order —
+        // restore newest-first
+        recents.sort { $0.endedAt > $1.endedAt }
     }
 
     private func pushRecent(id: String, _ s: Session, endedAt: Date) {

@@ -25,6 +25,10 @@ final class HUDState {
         let duration: TimeInterval
     }
     var lingering: Completion?
+    /// Completions queue up (bounded) and display sequentially — two agents
+    /// finishing together each get their moment instead of the last one
+    /// silently winning.
+    private var lingerQueue: [Completion] = []
     private var lingerTask: Task<Void, Never>?
     /// Previous snapshot's per-session states, for transition detection.
     private var priorStates: [String: SessionState] = [:]
@@ -87,12 +91,21 @@ final class HUDState {
     }
 
     private func showLinger(_ c: Completion) {
-        lingerTask?.cancel()
-        lingering = c
+        guard lingerQueue.count < 8 else { return } // bounded; drop overflow
+        lingerQueue.append(c)
+        drainLingerQueue()
+    }
+
+    private func drainLingerQueue() {
+        guard lingering == nil, !lingerQueue.isEmpty else { return }
+        lingering = lingerQueue.removeFirst()
         lingerTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(5))
+            // shorten each slot when more are waiting so a burst drains
+            let hold: Double = lingerQueue.isEmpty ? 5 : 2.5
+            try? await Task.sleep(for: .seconds(hold))
             guard !Task.isCancelled else { return }
             lingering = nil
+            drainLingerQueue()
         }
     }
 }

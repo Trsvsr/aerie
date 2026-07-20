@@ -191,6 +191,10 @@ final class NotchWindowController {
                 width: NotchGeometry.panelWidth,
                 height: NotchGeometry.panelHeight),
             display: true)
+        // re-derive mouse pass-through and alpha for the NEW display —
+        // otherwise a notched↔notchless switch keeps the old behavior
+        // until some unrelated HUD property changes
+        applyState()
     }
 
     /// Interactive shape in view coordinates (origin bottom-left):
