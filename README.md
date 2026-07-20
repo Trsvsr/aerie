@@ -20,18 +20,12 @@ notch:
 - **Agent finished**: a 5-second completion linger — green check, tool
   badge, total runtime — then the notch exhales back to invisible.
 
-| solo session | fleet with a blocked agent |
-|---|---|
-| ![solo](docs/pill-solo.png) | ![fleet](docs/pill-fleet.png) |
-
 Click the notch (or enable hover in settings) to expand the panel: one row
 per session with tool badge, project, **model tag**, current activity
 (derived from hook payloads — "editing Daemon.swift", "running: pytest"),
 and age. A collapsed **RECENT** section lists what finished lately. The
 gear opens settings; the first launch opens a setup wizard that installs
 hooks into whichever tools you enable.
-
-![expanded panel](docs/panel.png)
 
 ## How it works
 
