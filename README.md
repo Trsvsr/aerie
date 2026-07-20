@@ -2,8 +2,10 @@
   <img src="docs/title.svg" alt="aerie" width="340">
 </p>
 
-Agent status in the MacBook notch — an aerie is an eagle's nest built high
+<p align="center">
+Agent status in the MacBook notch — an aerie is an eagle's nest built high<br>
 on a cliff face, which is where your agents now roost, watching.
+</p>
 
 <p align="center">
   <img src="docs/aerie-demo.gif" alt="aerie demo" width="740">
