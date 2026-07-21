@@ -22,6 +22,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         warnAboutOtherNotchApps()
 
+        let sounds = SoundPlayer()
+        sounds.volume = Float(hud.settings.soundVolume)
+        hud.sounds = sounds
+        hud.resolveApproval = { [core] id, decision in
+            core.resolveApproval(id: id, decision: decision)
+        }
+
         core.onSnapshot = { [hud] snap in
             Task { @MainActor in hud.apply(snap) }
         }

@@ -38,9 +38,23 @@ final class HUDState {
     private var priorFirstEvents: [String: Date] = [:]
 
     let settings: AerieSettings
+    /// Wired by AppDelegate; nil in headless/tests.
+    @ObservationIgnored var sounds: SoundPlayer?
+    @ObservationIgnored var resolveApproval: ((String, String) -> Void)?
+    /// Approval ids we've already reacted to (sound + auto-expand).
+    @ObservationIgnored private var seenApprovalIDs: Set<String> = []
+    /// Allow is ignored for a beat after the front card appears/swaps so an
+    /// in-flight click/keystroke can't approve something it never saw.
+    var approvalArmedAt: Date = .distantPast
+    @ObservationIgnored private var lastNeedsInputSound: [String: Date] = [:]
 
     init(settings: AerieSettings) {
         self.settings = settings
+    }
+
+    /// Approvals for enabled sources, oldest first.
+    var displayApprovals: [PendingApproval] {
+        snapshot.approvals.filter { settings.isEnabled($0.source) }
     }
 
     /// Sessions after the per-tool visibility filter from settings.
@@ -64,9 +78,48 @@ final class HUDState {
 
     func apply(_ snap: Snapshot) {
         detectCompletions(snap)
+        detectNeedsInputTransitions(snap)
+        let priorFrontApproval = snapshot.approvals.first?.id
         snapshot = snap
+        reactToApprovals(frontWas: priorFrontApproval)
         // Note: going idle no longer force-collapses — the panel is
         // reachable (and useful, via settings) while idle.
+    }
+
+    private func reactToApprovals(frontWas: String?) {
+        let visible = displayApprovals
+        // arm-delay resets whenever the FRONT card changes identity
+        if visible.first?.id != frontWas {
+            approvalArmedAt = Date().addingTimeInterval(0.4)
+        }
+        for a in visible where !seenApprovalIDs.contains(a.id) {
+            seenApprovalIDs.insert(a.id)
+            if settings.soundsEnabled { sounds?.play(.approval) }
+            if settings.autoExpandOnApproval {
+                isExpanded = true
+                expandedByHover = false   // pinned — hover-out won't close it
+                showSettings = false
+                showWizard = false
+            }
+        }
+        if seenApprovalIDs.count > 64 {
+            let live = Set(snapshot.approvals.map(\.id))
+            seenApprovalIDs.formIntersection(live)
+        }
+    }
+
+    private func detectNeedsInputTransitions(_ snap: Snapshot) {
+        guard settings.soundsEnabled else { return }
+        for row in snap.rows where settings.isEnabled(row.source) {
+            let was = priorStates[row.id]
+            guard row.state == .needsInput, was != .needsInput, was != nil else { continue }
+            // approvals already play their own cue
+            guard !snap.approvals.contains(where: { $0.sessionID == row.id }) else { continue }
+            let last = lastNeedsInputSound[row.id] ?? .distantPast
+            guard Date().timeIntervalSince(last) >= 10 else { continue }
+            lastNeedsInputSound[row.id] = Date()
+            sounds?.play(.needsInput)
+        }
     }
 
     private func detectCompletions(_ snap: Snapshot) {
@@ -82,6 +135,7 @@ final class HUDState {
                                firstEvent: $0.endedAt.addingTimeInterval(-$0.duration))
                 }
                 guard let ended else { continue }
+                if settings.soundsEnabled { sounds?.play(.completion) }
                 showLinger(Completion(
                     project: ended.project,
                     source: ended.source,

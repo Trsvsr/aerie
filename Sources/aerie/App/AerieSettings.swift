@@ -26,6 +26,25 @@ final class AerieSettings {
     var hideInFullscreen: Bool {
         didSet { defaults.set(hideInFullscreen, forKey: "hideInFullscreen") }
     }
+    /// Sound cues for agent events.
+    var soundsEnabled: Bool {
+        didSet { defaults.set(soundsEnabled, forKey: "soundsEnabled") }
+    }
+    var soundVolume: Double {
+        didSet { defaults.set(soundVolume, forKey: "soundVolume") }
+    }
+    /// Auto-expand the panel when an approval request arrives.
+    var autoExpandOnApproval: Bool {
+        didSet { defaults.set(autoExpandOnApproval, forKey: "autoExpandOnApproval") }
+    }
+    /// Sources with notch approval enabled (separate opt-in from visibility).
+    var approvalSources: Set<String> {
+        didSet { defaults.set(Array(approvalSources), forKey: "approvalSources") }
+    }
+    /// Track provider usage/quota (statusline wrap + rollout parsing).
+    var usageTrackingEnabled: Bool {
+        didSet { defaults.set(usageTrackingEnabled, forKey: "usageTrackingEnabled") }
+    }
     /// Points added to safeAreaInsets.top for the active pill's height.
     /// The hardware notch edge isn't exactly the reported inset — on 2x
     /// retina it can sit on a half-point boundary — so this is tunable in
@@ -47,6 +66,11 @@ final class AerieSettings {
         hoverToExpand = defaults.object(forKey: "hoverToExpand") as? Bool ?? false
         expandWhenIdle = defaults.object(forKey: "expandWhenIdle") as? Bool ?? true
         hideInFullscreen = defaults.object(forKey: "hideInFullscreen") as? Bool ?? true
+        soundsEnabled = defaults.object(forKey: "soundsEnabled") as? Bool ?? true
+        soundVolume = defaults.object(forKey: "soundVolume") as? Double ?? 0.5
+        autoExpandOnApproval = defaults.object(forKey: "autoExpandOnApproval") as? Bool ?? true
+        approvalSources = Set(defaults.stringArray(forKey: "approvalSources") ?? [])
+        usageTrackingEnabled = defaults.object(forKey: "usageTrackingEnabled") as? Bool ?? false
         needsSetup = !(defaults.object(forKey: "setupCompleted") as? Bool ?? false)
         let initialEnabled: Set<String>
         if let stored = defaults.stringArray(forKey: "enabledSources") {

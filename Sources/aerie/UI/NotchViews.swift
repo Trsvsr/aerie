@@ -390,6 +390,26 @@ struct SettingsPane: View {
                 Toggle("Expand on hover", isOn: $settings.hoverToExpand)
                 Toggle("Open from notch when idle", isOn: $settings.expandWhenIdle)
                 Toggle("Hide in fullscreen apps", isOn: $settings.hideInFullscreen)
+                Toggle("Auto-open on approval requests", isOn: $settings.autoExpandOnApproval)
+                HStack(spacing: 8) {
+                    Toggle("Sounds", isOn: $settings.soundsEnabled)
+                    if settings.soundsEnabled {
+                        Slider(value: Binding(
+                            get: { settings.soundVolume },
+                            set: { settings.soundVolume = $0; hud.sounds?.volume = Float($0) }
+                        ), in: 0...1)
+                        .controlSize(.mini)
+                        .frame(width: 80)
+                        Button {
+                            hud.sounds?.play(.completion)
+                        } label: {
+                            Image(systemName: "play.circle")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
                 HStack(spacing: 8) {
                     Text("Notch seam")
                     Stepper(
