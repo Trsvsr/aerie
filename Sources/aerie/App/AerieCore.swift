@@ -77,12 +77,14 @@ final class AerieCore {
     }
 
     /// Resolve a pending approval from the UI (or `aerie approve/deny`).
-    /// Callable from any thread.
+    /// Callable from any thread. "none_user" = the user chose "use terminal":
+    /// the hook is released with no decision and the tool's own prompt runs.
     func resolveApproval(id: String, decision: String) {
+        let wireDecision = decision == "none_user" ? "none" : decision
         queue.async { [weak self] in
             guard let self else { return }
-            guard self.store.resolveApproval(id: id, decision: decision) != nil else { return }
-            self.finishApproval(id: id, decision: decision)
+            guard self.store.resolveApproval(id: id, decision: wireDecision) != nil else { return }
+            self.finishApproval(id: id, decision: wireDecision)
             self.publish()
         }
     }

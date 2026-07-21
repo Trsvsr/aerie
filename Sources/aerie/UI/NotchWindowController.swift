@@ -153,7 +153,11 @@ final class NotchWindowController {
     }
 
     private func updateFullscreenState() {
-        let shouldHide = hud.settings.hideInFullscreen && fullscreenAppIsFrontmost()
+        // approvals pierce fullscreen hiding — a parked agent hook beats
+        // "don't disturb my movie" (panel is .fullScreenAuxiliary already)
+        let shouldHide = hud.settings.hideInFullscreen
+            && fullscreenAppIsFrontmost()
+            && hud.displayApprovals.isEmpty
         guard shouldHide != hiddenForFullscreen else { return }
         hiddenForFullscreen = shouldHide
         guard let panel else { return }
@@ -332,10 +336,11 @@ final class NotchWindowController {
         localMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .keyDown]
         ) { [weak self] event in
+            var swallow = false
             MainActor.assumeIsolated {
                 guard let self else { return }
                 if event.type == .keyDown {
-                    if event.keyCode == 53 { self.collapse() } // Esc
+                    swallow = self.handleKeyDown(event)
                     return
                 }
                 if let panel = self.panel, event.window === panel {
@@ -345,7 +350,35 @@ final class NotchWindowController {
                     self.collapse()
                 }
             }
-            return event
+            return swallow ? nil : event
+        }
+    }
+
+    /// Keyboard while expanded. With an approval card showing: ⌘Y allow
+    /// (arm-delayed, capability-gated), ⌘N deny, Esc = "use terminal"
+    /// (resolves none — the tool's own prompt takes over). Without: Esc
+    /// collapses. Returns true if the event was consumed.
+    private func handleKeyDown(_ event: NSEvent) -> Bool {
+        let approval = hud.displayApprovals.first
+        if event.keyCode == 53 { // Esc
+            if let approval {
+                hud.resolveApproval?(approval.id, "none_user")
+            } else {
+                collapse()
+            }
+            return true
+        }
+        guard let approval, event.modifierFlags.contains(.command),
+              let chars = event.charactersIgnoringModifiers?.lowercased() else { return false }
+        switch chars {
+        case "y" where approval.canAllow && Date() >= hud.approvalArmedAt:
+            hud.resolveApproval?(approval.id, "allow")
+            return true
+        case "n":
+            hud.resolveApproval?(approval.id, "deny")
+            return true
+        default:
+            return false
         }
     }
 

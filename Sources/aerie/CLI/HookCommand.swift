@@ -20,6 +20,11 @@ enum HookCommand {
         let forcedNotificationType = flag("--notification-type")
 
         let stdin = FileHandle.standardInput.readDataToEndOfFile()
+        // The approval path is its own world: it MAY block waiting for the
+        // user. Everything below stays fire-and-forget.
+        if args.contains("--approve") {
+            ApprovalHook.run(source: source, stdin: stdin)   // never returns
+        }
         // Keep the last raw payload per event around for schema debugging
         // (new tools, new fields) — tiny, local, overwritten constantly.
         if let event = eventFromArgv {

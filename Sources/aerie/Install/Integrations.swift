@@ -131,6 +131,83 @@ enum ToolIntegration: String, CaseIterable {
     /// [{command}]}}`); the others nest a hooks array per entry.
     private var usesFlatEntries: Bool { self == .cursor }
 
+    /// Tools where the notch can decide permissions via a blocking hook.
+    var supportsApproval: Bool {
+        self == .claude || self == .codex || self == .cursor
+    }
+
+    /// The (tool event, matcher-or-nil) the blocking approval hook rides on.
+    private var approvalEvent: (event: String, matcher: String?)? {
+        switch self {
+        case .claude:
+            // PreToolUse fires for EVERY matched call — scope the matcher to
+            // permission-prone tools so allowlisted reads don't detour.
+            return ("PreToolUse", "Bash|Write|Edit|MultiEdit|NotebookEdit")
+        case .codex: return ("PermissionRequest", nil)
+        case .cursor: return ("beforeShellExecution", nil)
+        default: return nil
+        }
+    }
+
+    var approvalInstalled: Bool {
+        guard let data = try? Data(contentsOf: configURL),
+              let text = String(data: data, encoding: .utf8) else { return false }
+        return text.contains("--approve")
+    }
+
+    /// Install the blocking approval hook entry (separate from status hooks;
+    /// independently removable). Returns true if changed.
+    @discardableResult
+    func installApproval(binaryPath: String) throws -> Bool {
+        guard let (event, matcher) = approvalEvent else { return false }
+        var root = try readJSON(configURL.deletingLastPathComponent()
+            .appendingPathComponent(configURL.lastPathComponent))
+        var hooks = root["hooks"] as? [String: Any] ?? [:]
+        var entries = hooks[event] as? [[String: Any]] ?? []
+        guard !entries.contains(where: { entryText($0).contains("--approve") }) else { return false }
+
+        let command = "\(binaryPath) hook \(event) --approve --source \(rawValue)"
+        if usesFlatEntries {
+            entries.append(["command": command, "timeout": 60])
+        } else {
+            var entry: [String: Any] = [
+                "hooks": [["type": "command", "command": command, "timeout": 60]]
+            ]
+            if let matcher { entry["matcher"] = matcher }
+            entries.append(entry)
+        }
+        hooks[event] = entries
+        root["hooks"] = hooks
+        if usesFlatEntries, root["version"] == nil { root["version"] = 1 }
+        try writeJSON(root, to: configURL)
+        return true
+    }
+
+    @discardableResult
+    func uninstallApproval(binaryPath: String) throws -> Bool {
+        var root = try readJSON(configURL)
+        guard var hooks = root["hooks"] as? [String: Any] else { return false }
+        var changed = false
+        for (event, value) in hooks {
+            guard let entries = value as? [[String: Any]] else { continue }
+            let kept = entries.filter { !entryText($0).contains("--approve") }
+            if kept.count != entries.count {
+                hooks[event] = kept.isEmpty ? nil : kept
+                changed = true
+            }
+        }
+        guard changed else { return false }
+        root["hooks"] = hooks
+        try writeJSON(root, to: configURL)
+        return true
+    }
+
+    private func entryText(_ entry: [String: Any]) -> String {
+        if let cmd = entry["command"] as? String { return cmd }
+        guard let inner = entry["hooks"] as? [[String: Any]] else { return "" }
+        return inner.compactMap { $0["command"] as? String }.joined(separator: " ")
+    }
+
     /// Install aerie hook entries into the tool's JSON config (merge,
     /// append-only, existing entries preserved), or write the generated
     /// plugin/extension script for script-based tools. Returns true if changed.

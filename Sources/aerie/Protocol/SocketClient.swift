@@ -9,13 +9,25 @@ enum SocketClient {
     }
 
     static func request(_ req: WireRequest, timeoutMS: Int = 250) throws -> WireResponse {
+        try request(req, sendTimeoutMS: timeoutMS, readTimeoutMS: timeoutMS)
+    }
+
+    /// Split-timeout variant for approvals: connect/send must fail fast when
+    /// the app is down (never stall the agent CLI), but the read may park
+    /// for most of a minute while the user decides.
+    static func request(
+        _ req: WireRequest, sendTimeoutMS: Int, readTimeoutMS: Int
+    ) throws -> WireResponse {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw ClientError.connectFailed }
         defer { close(fd) }
 
-        var tv = timeval(tv_sec: timeoutMS / 1000, tv_usec: Int32((timeoutMS % 1000) * 1000))
+        var tv = timeval(tv_sec: readTimeoutMS / 1000,
+                         tv_usec: Int32((readTimeoutMS % 1000) * 1000))
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
-        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var stv = timeval(tv_sec: sendTimeoutMS / 1000,
+                          tv_usec: Int32((sendTimeoutMS % 1000) * 1000))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &stv, socklen_t(MemoryLayout<timeval>.size))
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)

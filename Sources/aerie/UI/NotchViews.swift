@@ -248,6 +248,22 @@ struct ExpandedView: View {
                 SetupWizardPane(hud: hud)
             } else if hud.showSettings {
                 SettingsPane(hud: hud)
+            } else if let approval = hud.displayApprovals.first {
+                ApprovalCardView(hud: hud, approval: approval,
+                                 queued: hud.displayApprovals.count - 1)
+                if !hud.displayRows.isEmpty {
+                    Divider().overlay(.white.opacity(0.1))
+                        .padding(.horizontal, 14)
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(hud.displayRows) { row in
+                                SessionRowView(row: row)
+                            }
+                        }
+                        .padding(.vertical, 6)
+                    }
+                    .frame(maxHeight: 120)
+                }
             } else if hud.displayRows.isEmpty {
                 Text("no active sessions")
                     .font(.caption)
@@ -308,6 +324,104 @@ struct ExpandedView: View {
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
             // hit area must track the card, not the full panel window
             hud.expandedContentHeight = height
+        }
+    }
+}
+
+/// A pending permission request: the agent's hook is parked on our decision.
+/// Security posture: the FULL tool input is always visible (scrollable, never
+/// truncated), Allow is arm-delayed 400ms, ignoring is always safe (the
+/// terminal prompt takes over at timeout).
+struct ApprovalCardView: View {
+    var hud: HUDState
+    let approval: PendingApproval
+    let queued: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                SourceBadge(source: approval.source, state: .needsInput, size: 13)
+                Text(approval.project)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+                if let tool = approval.toolName {
+                    Text(tool)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(.white.opacity(0.08)))
+                }
+                Spacer()
+                if queued > 0 {
+                    Text("+\(queued) waiting")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.orange.opacity(0.7))
+                }
+                CountdownBar(until: approval.expiresAt)
+            }
+
+            ScrollView {
+                Text(approval.toolInputJSON)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .frame(minHeight: 40, maxHeight: 140)
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.05)))
+
+            HStack(spacing: 10) {
+                Button {
+                    hud.resolveApproval?(approval.id, "deny")
+                } label: {
+                    Label("Deny", systemImage: "xmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.bordered)
+                .keyboardShortcut("n", modifiers: .command)
+
+                if approval.canAllow {
+                    TimelineView(.periodic(from: .now, by: 0.2)) { context in
+                        let armed = context.date >= hud.approvalArmedAt
+                        Button {
+                            guard Date() >= hud.approvalArmedAt else { return }
+                            hud.resolveApproval?(approval.id, "allow")
+                        } label: {
+                            Label("Allow", systemImage: "checkmark")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(armed ? .green : .gray)
+                        }
+                        .buttonStyle(.bordered)
+                        .keyboardShortcut("y", modifiers: .command)
+                        .disabled(!armed)
+                    }
+                }
+
+                Spacer()
+                Text(approval.canAllow ? "⌘Y allow · ⌘N deny · esc → terminal"
+                                       : "⌘N deny · esc → terminal")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.white.opacity(0.3))
+            }
+        }
+        .padding(.horizontal, 30)
+        .padding(.vertical, 12)
+    }
+}
+
+/// Thin bar draining toward the approval deadline.
+struct CountdownBar: View {
+    let until: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let remaining = max(0, until.timeIntervalSince(context.date))
+            Text("\(Int(remaining))s")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(remaining < 10 ? .red : .white.opacity(0.4))
         }
     }
 }
@@ -427,25 +541,52 @@ struct SettingsPane: View {
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.3))
                 ForEach(AerieSettings.knownTools, id: \.rawValue) { tool in
-                    Toggle(isOn: Binding(
-                        get: { settings.isEnabled(tool.rawValue) },
-                        set: { settings.setEnabled(tool.rawValue, $0) }
-                    )) {
-                        HStack(spacing: 8) {
-                            SourceBadge(source: tool.rawValue, state: .working, size: 12)
-                            Text(tool.displayName)
-                            if !tool.isDetected {
-                                Text("not detected")
+                    HStack(spacing: 8) {
+                        Toggle(isOn: Binding(
+                            get: { settings.isEnabled(tool.rawValue) },
+                            set: { settings.setEnabled(tool.rawValue, $0) }
+                        )) {
+                            HStack(spacing: 8) {
+                                SourceBadge(source: tool.rawValue, state: .working, size: 12)
+                                Text(tool.displayName)
+                                if !tool.isDetected {
+                                    Text("not detected")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.white.opacity(0.3))
+                                } else if !tool.isInstalled {
+                                    Text("hooks not installed")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.orange.opacity(0.6))
+                                }
+                            }
+                        }
+                        if tool.supportsApproval, tool.isDetected, tool.isInstalled {
+                            Toggle(isOn: Binding(
+                                get: { settings.approvalSources.contains(tool.rawValue) },
+                                set: { on in
+                                    do {
+                                        if on {
+                                            _ = try tool.installApproval(binaryPath: currentBinaryPath())
+                                            settings.approvalSources.insert(tool.rawValue)
+                                        } else {
+                                            _ = try tool.uninstallApproval(binaryPath: currentBinaryPath())
+                                            settings.approvalSources.remove(tool.rawValue)
+                                        }
+                                    } catch {
+                                        log("approval toggle failed for \(tool.rawValue): \(error)")
+                                    }
+                                }
+                            )) {
+                                Text(tool == .cursor ? "veto" : "approve")
                                     .font(.system(size: 9))
-                                    .foregroundStyle(.white.opacity(0.3))
-                            } else if !tool.isInstalled {
-                                Text("hooks not installed")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.orange.opacity(0.6))
+                                    .foregroundStyle(.white.opacity(0.45))
                             }
                         }
                     }
                 }
+                Text("approve = decide agent permissions from the notch (ignoring falls back to the terminal)")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.white.opacity(0.25))
                 Button("set up tool hooks…") {
                     withAnimation(.spring(duration: 0.25)) {
                         hud.showWizard = true

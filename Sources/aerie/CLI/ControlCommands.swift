@@ -14,11 +14,32 @@ func controlRequest(_ req: WireRequest) -> Never {
     }
 }
 
+/// `aerie approve <id>` / `aerie deny <id>` — resolve a pending approval
+/// from the command line (testing, scripting). Same-user trust boundary.
+func approvalResolveCommand(decision: String, args: [String]) -> Never {
+    guard let id = args.first(where: { !$0.hasPrefix("--") }) else {
+        // no id: resolve the oldest pending approval
+        if let resp = try? SocketClient.request(WireRequest(cmd: "status"), timeoutMS: 1000),
+           let first = resp.approvals?.first {
+            controlRequest(WireRequest(cmd: "approval_resolve",
+                                       approvalID: first.id, decision: decision))
+        }
+        print("usage: aerie \(decision == "allow" ? "approve" : "deny") <approval-id>  (no pending approvals)")
+        exit(1)
+    }
+    controlRequest(WireRequest(cmd: "approval_resolve", approvalID: id, decision: decision))
+}
+
 func statusCommand() -> Never {
     do {
         let resp = try SocketClient.request(WireRequest(cmd: "status"), timeoutMS: 1000)
         print("aggregate: \(resp.aggregate ?? "?")")
         if let s = resp.summary { print("summary:   \(s)") }
+        for a in resp.approvals ?? [] {
+            let input = a.toolInputJSON.split(whereSeparator: \.isNewline)
+                .joined(separator: " ").prefix(80)
+            print("  APPROVAL \(a.id.prefix(8)) [\(a.source)] \(a.project) \(a.toolName ?? "?") — \(input) (\(a.expiresInS)s left)")
+        }
         for row in resp.sessions ?? [] {
             let age = row.ageSeconds < 120 ? "\(row.ageSeconds)s" : "\(row.ageSeconds / 60)m"
             let model = row.model.map { " [\($0)]" } ?? ""

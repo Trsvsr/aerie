@@ -71,6 +71,10 @@ case "status":
     statusCommand()
 case "doctor":
     DoctorCommand.run()
+case "approve":
+    approvalResolveCommand(decision: "allow", args: Array(args.dropFirst()))
+case "deny":
+    approvalResolveCommand(decision: "deny", args: Array(args.dropFirst()))
 case "reset":
     controlRequest(WireRequest(cmd: "reset"))
 case "quit":
