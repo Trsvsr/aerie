@@ -37,6 +37,22 @@ struct SessionRow: Identifiable, Equatable, Sendable {
     let firstEvent: Date
 }
 
+/// A pending permission request: an agent's hook is parked waiting for the
+/// user's decision (or timeout → the tool's own terminal prompt).
+struct PendingApproval: Identifiable, Equatable, Sendable {
+    let id: String
+    let sessionID: String
+    let source: String
+    let project: String
+    let toolName: String?
+    /// Full tool input — the user must see everything before allowing.
+    let toolInputJSON: String
+    let requestedAt: Date
+    let expiresAt: Date
+    /// False where hook-driven allow is unreliable (Cursor) — deny-only card.
+    let canAllow: Bool
+}
+
 /// A finished session, kept briefly for the "recent" panel section.
 /// Summary only — no commands, prompts, or transcripts.
 struct RecentSession: Identifiable, Equatable, Sendable {
@@ -81,6 +97,9 @@ final class SessionStore {
     }
 
     private(set) var sessions: [String: Session] = [:]
+    /// Pending permission requests, FIFO (oldest first — that hook has been
+    /// waiting longest).
+    private(set) var approvals: [PendingApproval] = []
     /// Newest-first ring of ended sessions (SessionEnd or working→idle
     /// completion), capped at `recentsCap`.
     private(set) var recents: [RecentSession] = []
@@ -241,7 +260,66 @@ final class SessionStore {
         return "\(top.project): \(top.activity)"
     }
 
+    // MARK: approvals
+
+    /// Register a pending approval and flip its session to needsInput.
+    func addApproval(_ req: WireRequest, id: String, timeout: TimeInterval) {
+        guard let sessionID = req.sessionID else { return }
+        let ts = now()
+        lastSeenBySource[req.source ?? "claude"] = ts
+
+        var s = sessions[sessionID]
+            ?? Session(state: .idle, lastEvent: ts, firstEvent: ts, cwd: req.cwd,
+                       activity: "", source: req.source ?? "claude")
+        s.lastEvent = ts
+        if let cwd = req.cwd { s.cwd = cwd }
+        s.state = .needsInput
+        let summary = ActivityFormatter.format(
+            toolName: req.toolName, file: nil, command: req.toolCommand,
+            description: nil, pattern: nil, url: nil)
+        s.activity = "awaiting approval: \(summary)"
+        sessions[sessionID] = s
+
+        approvals.append(PendingApproval(
+            id: id,
+            sessionID: sessionID,
+            source: req.source ?? "claude",
+            project: req.cwd.map { ($0 as NSString).lastPathComponent } ?? "?",
+            toolName: req.toolName,
+            toolInputJSON: req.toolInputJSON ?? "",
+            requestedAt: ts,
+            expiresAt: ts.addingTimeInterval(timeout),
+            canAllow: req.canAllow ?? true))
+    }
+
+    /// Remove a pending approval; returns it if found. On allow the session
+    /// goes back to working (the tool is about to run); on deny/none we
+    /// leave needsInput — the agent's next event will correct the state.
+    @discardableResult
+    func resolveApproval(id: String, decision: String) -> PendingApproval? {
+        guard let idx = approvals.firstIndex(where: { $0.id == id }) else { return nil }
+        let a = approvals.remove(at: idx)
+        if decision == "allow", var s = sessions[a.sessionID] {
+            s.state = .working
+            s.activity = "thinking…"
+            s.lastEvent = now()
+            sessions[a.sessionID] = s
+        }
+        return a
+    }
+
+    /// Drop approvals past their deadline (defensive backstop — the server's
+    /// per-approval timers are the primary expiry path). Returns expired ids.
+    @discardableResult
+    func expireApprovals() -> [String] {
+        let ts = now()
+        let expired = approvals.filter { $0.expiresAt <= ts }
+        approvals.removeAll { $0.expiresAt <= ts }
+        return expired.map(\.id)
+    }
+
     func reset() {
         sessions.removeAll()
+        approvals.removeAll()
     }
 }

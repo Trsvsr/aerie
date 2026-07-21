@@ -1,8 +1,9 @@
 import Foundation
 
-/// One NDJSON request per connection; the app replies with one NDJSON line.
+/// One NDJSON request per connection; the app replies with one NDJSON line
+/// (immediately, or — for `approval` — when the user decides).
 struct WireRequest: Codable {
-    let cmd: String                 // event | status | reset | ping | quit
+    let cmd: String    // event | status | reset | ping | quit | approval | approval_resolve
     var sessionID: String?
     var event: String?
     var source: String?             // originating agent tool, e.g. "claude"
@@ -16,6 +17,19 @@ struct WireRequest: Codable {
     var notificationType: String?
     var message: String?
     var model: String?
+    // approval request (cmd: "approval")
+    var toolInputJSON: String?      // FULL tool_input, 8KiB clip — user must
+                                    // see everything before approving
+    var timeoutS: Int?
+    var canAllow: Bool?             // false for tools where allow is unreliable
+    // approval_resolve
+    var approvalID: String?
+    var decision: String?           // "allow" | "deny"
+    // terminal identity (SessionStart) for jump
+    var termProgram: String?
+    var tmuxPane: String?
+    var itermSession: String?
+    var tty: String?
 
     enum CodingKeys: String, CodingKey {
         case cmd
@@ -32,6 +46,36 @@ struct WireRequest: Codable {
         case notificationType = "notification_type"
         case message
         case model
+        case toolInputJSON = "tool_input_json"
+        case timeoutS = "timeout_s"
+        case canAllow = "can_allow"
+        case approvalID = "approval_id"
+        case decision
+        case termProgram = "term_program"
+        case tmuxPane = "tmux_pane"
+        case itermSession = "iterm_session"
+        case tty
+    }
+}
+
+struct WireApprovalInfo: Codable {
+    let id: String
+    let sessionID: String
+    let source: String
+    let project: String
+    let toolName: String?
+    let toolInputJSON: String
+    let expiresInS: Int
+    let canAllow: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case sessionID = "session_id"
+        case source, project
+        case toolName = "tool_name"
+        case toolInputJSON = "tool_input_json"
+        case expiresInS = "expires_in_s"
+        case canAllow = "can_allow"
     }
 }
 
@@ -58,11 +102,16 @@ struct WireResponse: Codable {
     var sessions: [WireSessionInfo]?
     /// source → unix epoch of last event seen (doctor/health)
     var lastSeenBySource: [String: Double]?
+    /// approval reply: "allow" | "deny" | "none"; also the id on submit
+    var decision: String?
+    var approvalID: String?
+    var approvals: [WireApprovalInfo]?
     var version: String?
 
     enum CodingKeys: String, CodingKey {
-        case ok, error, aggregate, summary, sessions, version
+        case ok, error, aggregate, summary, sessions, version, decision, approvals
         case lastSeenBySource = "last_seen_by_source"
+        case approvalID = "approval_id"
     }
 }
 

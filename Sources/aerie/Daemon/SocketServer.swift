@@ -1,7 +1,83 @@
 import Foundation
 
-/// Unix-socket listener: one NDJSON request per connection → one response.
-/// Handler runs on the core queue; connections are short-lived.
+/// One accepted connection's reply channel. Most commands reply immediately;
+/// approvals PARK the reply until the user decides (or timeout / hangup).
+/// One-shot: exactly one send ever writes; later sends are no-ops. If the
+/// client disconnects while parked, `onHangup` fires on the handler queue.
+final class ConnectionReply {
+    private let fd: Int32
+    private let lock = NSLock()
+    private var sent = false
+    private var eofSource: DispatchSourceRead?
+    /// Set before calling park(); invoked (once) on `queue` if the peer
+    /// disconnects before a reply is sent.
+    var onHangup: (() -> Void)?
+    private let queue: DispatchQueue
+
+    init(fd: Int32, queue: DispatchQueue) {
+        self.fd = fd
+        self.queue = queue
+    }
+
+    /// Send the reply and close. Safe to call from any thread, any number of
+    /// times — only the first call writes.
+    func send(_ resp: WireResponse) {
+        lock.lock()
+        guard !sent else { lock.unlock(); return }
+        sent = true
+        let src = eofSource
+        eofSource = nil
+        lock.unlock()
+
+        src?.cancel()   // cancel handler closes the fd
+        if src == nil {
+            Self.write(fd, resp)
+            close(fd)
+        } else {
+            Self.write(fd, resp)
+            // fd is closed by the cancel handler
+        }
+    }
+
+    /// Arm an EOF watcher for a parked connection: a readable event with zero
+    /// bytes means the client gave up (its own timeout) or died.
+    func park() {
+        lock.lock()
+        guard !sent, eofSource == nil else { lock.unlock(); return }
+        let src = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
+        eofSource = src
+        lock.unlock()
+
+        src.setEventHandler { [weak self] in
+            guard let self else { return }
+            var probe = [UInt8](repeating: 0, count: 1)
+            let n = recv(self.fd, &probe, 1, MSG_PEEK)
+            if n <= 0 { self.hangup() }
+        }
+        src.setCancelHandler { [fd] in close(fd) }
+        src.resume()
+    }
+
+    private func hangup() {
+        lock.lock()
+        guard !sent else { lock.unlock(); return }
+        sent = true
+        let src = eofSource
+        eofSource = nil
+        lock.unlock()
+        src?.cancel()
+        onHangup?()
+    }
+
+    private static func write(_ fd: Int32, _ resp: WireResponse) {
+        guard var out = try? JSONEncoder().encode(resp) else { return }
+        out.append(0x0A)
+        _ = out.withUnsafeBytes { Foundation.write(fd, $0.baseAddress, $0.count) }
+    }
+}
+
+/// Unix-socket listener: one NDJSON request per connection → one response
+/// (possibly deferred, for approvals). Handler runs on the core queue.
 final class SocketServer {
     private var listenFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
@@ -11,9 +87,9 @@ final class SocketServer {
     /// so one slow client can't delay others (or the core queue).
     private let ioQueue = DispatchQueue(
         label: "com.trevor.aerie.socket-io", attributes: .concurrent)
-    private let handler: (WireRequest) -> WireResponse
+    private let handler: (WireRequest, ConnectionReply) -> Void
 
-    init(queue: DispatchQueue, handler: @escaping (WireRequest) -> WireResponse) {
+    init(queue: DispatchQueue, handler: @escaping (WireRequest, ConnectionReply) -> Void) {
         self.queue = queue
         self.handler = handler
     }
@@ -114,22 +190,18 @@ final class SocketServer {
             complete = true
         }
 
+        let reply = ConnectionReply(fd: fd, queue: queue)
         guard complete, let req = try? JSONDecoder().decode(WireRequest.self, from: data) else {
-            Self.respond(fd, WireResponse(ok: false, error: "bad request"))
-            close(fd)
+            reply.send(WireResponse(ok: false, error: "bad request"))
             return
         }
         // handler (and the store it guards) runs on the core queue
         queue.async { [weak self] in
-            let resp = self?.handler(req) ?? WireResponse(ok: false, error: "shutting down")
-            Self.respond(fd, resp)
-            close(fd)
+            guard let self else {
+                reply.send(WireResponse(ok: false, error: "shutting down"))
+                return
+            }
+            self.handler(req, reply)
         }
-    }
-
-    private static func respond(_ fd: Int32, _ resp: WireResponse) {
-        guard var out = try? JSONEncoder().encode(resp) else { return }
-        out.append(0x0A)
-        _ = out.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
     }
 }
