@@ -283,6 +283,9 @@ struct ExpandedView: View {
                 .frame(maxHeight: 280)
             }
 
+            if hud.settings.usageTrackingEnabled, !hud.showSettings, !hud.showWizard {
+                UsageSection()
+            }
             Divider().overlay(.white.opacity(0.1))
                 .padding(.horizontal, 14)  // stay inside the flared side walls
             HStack {
@@ -436,6 +439,77 @@ struct CountdownBar: View {
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(remaining < 10 ? .red : .white.opacity(0.4))
         }
+    }
+}
+
+/// Provider quota bars: local-only reads (statusline tee for Claude, rollout
+/// tail for Codex), refreshed on appear + every 60s while visible.
+struct UsageSection: View {
+    @State private var usage: [ProviderUsage] = []
+
+    var body: some View {
+        if !usage.isEmpty {
+            VStack(spacing: 4) {
+                ForEach(usage, id: \.provider) { p in
+                    HStack(spacing: 8) {
+                        SourceBadge(source: p.provider, state: .off, size: 10)
+                        ForEach(p.windows, id: \.label) { w in
+                            HStack(spacing: 4) {
+                                Text(w.label)
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.35))
+                                GeometryReader { geo in
+                                    ZStack(alignment: .leading) {
+                                        Capsule().fill(.white.opacity(0.08))
+                                        Capsule()
+                                            .fill(w.usedPercent > 85 ? Color.red
+                                                  : w.usedPercent > 60 ? .orange : .green)
+                                            .frame(width: geo.size.width
+                                                   * min(w.usedPercent, 100) / 100)
+                                    }
+                                }
+                                .frame(width: 50, height: 3)
+                                Text("\(Int(w.usedPercent))%")
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.45))
+                                if let resets = w.resetsAt {
+                                    Text("↺\(compactETA(resets))")
+                                        .font(.system(size: 8, design: .monospaced))
+                                        .foregroundStyle(.white.opacity(0.25))
+                                }
+                            }
+                        }
+                        Spacer()
+                        if p.isStale {
+                            Text("stale")
+                                .font(.system(size: 8))
+                                .foregroundStyle(.white.opacity(0.25))
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 30)
+            .padding(.vertical, 6)
+            .opacity(usage.allSatisfy(\.isStale) ? 0.5 : 1)
+            .task {
+                usage = UsageReader.read()
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(60))
+                    usage = UsageReader.read()
+                }
+            }
+        } else {
+            Color.clear.frame(height: 0)
+                .task { usage = UsageReader.read() }
+        }
+    }
+
+    private func compactETA(_ date: Date) -> String {
+        let s = Int(date.timeIntervalSinceNow)
+        if s <= 0 { return "now" }
+        if s < 3600 { return "\(s / 60)m" }
+        if s < 86_400 { return "\(s / 3600)h" }
+        return "\(s / 86_400)d"
     }
 }
 
@@ -600,6 +674,21 @@ struct SettingsPane: View {
                 Text("approve = decide agent permissions from the notch (ignoring falls back to the terminal)")
                     .font(.system(size: 9))
                     .foregroundStyle(.white.opacity(0.25))
+                Toggle("Usage tracking (local quota bars)", isOn: Binding(
+                    get: { settings.usageTrackingEnabled },
+                    set: { on in
+                        settings.usageTrackingEnabled = on
+                        do {
+                            if on {
+                                try HooksPatcher.StatuslinePatcher.install(binaryPath: currentBinaryPath())
+                            } else {
+                                try HooksPatcher.StatuslinePatcher.uninstall()
+                            }
+                        } catch {
+                            log("statusline patch failed: \(error)")
+                        }
+                    }
+                ))
                 Button("set up tool hooks…") {
                     withAnimation(.spring(duration: 0.25)) {
                         hud.showWizard = true

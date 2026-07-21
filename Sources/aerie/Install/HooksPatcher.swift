@@ -95,6 +95,67 @@ enum HooksPatcher {
         try ConfigWriter.writeThroughSymlinks(data, to: url)
     }
 
+    // MARK: statusline wrapping (Claude usage tracking)
+
+    /// Claude only surfaces quota via the statusLine command's stdin JSON, so
+    /// usage tracking wraps whatever statusline the user has: their original
+    /// command is preserved inside our `--chain` argument and restored
+    /// verbatim on uninstall.
+    enum StatuslinePatcher {
+        static func install(binaryPath: String, settingsURL: URL? = nil) throws {
+            let url = settingsURL ?? HooksPatcher.settingsPath()
+            var root = try readRoot(url)
+            let ours = "\(binaryPath) statusline"
+            if let existing = root["statusLine"] as? [String: Any],
+               let cmd = existing["command"] as? String {
+                if cmd.contains(" statusline") { return }  // already ours
+                // preserve the original inside --chain (single-quote safe)
+                let escaped = cmd.replacingOccurrences(of: "'", with: "'\\''")
+                root["statusLine"] = [
+                    "type": "command",
+                    "command": "\(ours) --chain '\(escaped)'",
+                ]
+            } else {
+                root["statusLine"] = ["type": "command", "command": ours]
+            }
+            try HooksPatcher.backup(url)
+            try write(root, to: url)
+        }
+
+        static func uninstall(settingsURL: URL? = nil) throws {
+            let url = settingsURL ?? HooksPatcher.settingsPath()
+            var root = try readRoot(url)
+            guard let sl = root["statusLine"] as? [String: Any],
+                  let cmd = sl["command"] as? String,
+                  cmd.contains(" statusline") else { return }
+            if let range = cmd.range(of: "--chain '"), cmd.hasSuffix("'") {
+                // restore the original chained command
+                var original = String(cmd[range.upperBound...].dropLast())
+                original = original.replacingOccurrences(of: "'\\''", with: "'")
+                root["statusLine"] = ["type": "command", "command": original]
+            } else {
+                root["statusLine"] = nil
+            }
+            try HooksPatcher.backup(url)
+            try write(root, to: url)
+        }
+
+        private static func readRoot(_ url: URL) throws -> [String: Any] {
+            guard let data = try? Data(contentsOf: url) else { return [:] }
+            guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw NSError(domain: "aerie", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "\(url.path) is not valid JSON — refusing to write"])
+            }
+            return obj
+        }
+
+        private static func write(_ root: [String: Any], to url: URL) throws {
+            let data = try JSONSerialization.data(
+                withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+            try ConfigWriter.writeThroughSymlinks(data, to: url)
+        }
+    }
+
     private static func backup(_ url: URL) throws {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         let dir = url.deletingLastPathComponent().appendingPathComponent("backups")
