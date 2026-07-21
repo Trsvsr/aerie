@@ -382,6 +382,7 @@ struct ApprovalCardView: View {
                     Label("Deny", systemImage: "xmark")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.red)
+                        .fixedSize()   // don't reflow during the expand scale
                 }
                 .buttonStyle(.bordered)
                 .keyboardShortcut("n", modifiers: .command)
@@ -396,6 +397,7 @@ struct ApprovalCardView: View {
                             Label("Allow", systemImage: "checkmark")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(armed ? .green : .gray)
+                                .fixedSize()
                         }
                         .buttonStyle(.bordered)
                         .keyboardShortcut("y", modifiers: .command)
