@@ -28,14 +28,23 @@ struct SetupWizardPane: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(detected, id: \.self) { tool in
-                    Toggle(isOn: binding(tool)) {
+                    if tool.isDetectionOnly {
                         HStack(spacing: 8) {
-                            SourceBadge(source: tool.rawValue, state: .working, size: 12)
-                            Text(tool.displayName)
-                            if let note = results[tool] {
-                                Text(note)
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.white.opacity(0.35))
+                            SourceBadge(source: tool.rawValue, state: .off, size: 12)
+                            Text("\(tool.displayName) — detected; its hooks can't run external commands yet")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.35))
+                        }
+                    } else {
+                        Toggle(isOn: binding(tool)) {
+                            HStack(spacing: 8) {
+                                SourceBadge(source: tool.rawValue, state: .working, size: 12)
+                                Text(tool.displayName)
+                                if let note = results[tool] {
+                                    Text(note)
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.white.opacity(0.35))
+                                }
                             }
                         }
                     }
@@ -104,7 +113,7 @@ struct SetupWizardPane: View {
 
     private func apply() {
         let binary = currentBinaryPath()
-        for tool in detected {
+        for tool in detected where !tool.isDetectionOnly {
             let want = selection[tool] ?? false
             do {
                 if want {

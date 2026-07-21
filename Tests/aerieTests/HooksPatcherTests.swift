@@ -99,3 +99,13 @@ final class HooksPatcherTests: XCTestCase {
         XCTAssertEqual(hooks.count, HooksPatcher.events.count)
     }
 }
+
+extension HooksPatcherTests {
+    func testCopilotManifestGeneration() {
+        let manifest = ToolIntegration.copilot.copilotManifest(binaryPath: "/usr/local/bin/aerie")
+        XCTAssertTrue(manifest.contains(#""PreToolUse""#))
+        XCTAssertTrue(manifest.contains("aerie hook PreToolUse --source copilot"))
+        // valid JSON
+        XCTAssertNoThrow(try JSONSerialization.jsonObject(with: Data(manifest.utf8)))
+    }
+}

@@ -20,6 +20,8 @@ struct SourceBadge: View {
         case "cursor": return Color(white: 0.85)                         // Cursor mono
         case "opencode": return Color(red: 0.99, green: 0.87, blue: 0.32) // opencode gold
         case "pi": return Color(red: 0.62, green: 0.55, blue: 0.98)      // Pi violet
+        case "copilot": return Color(red: 0.55, green: 0.76, blue: 0.98) // GitHub blue
+        case "amp": return Color(red: 0.95, green: 0.35, blue: 0.25)     // Amp red-orange
         default: return .orange
         }
     }
@@ -52,6 +54,16 @@ struct SourceBadge: View {
             case "cursor":
                 CursorCubeShape()
                     .fill(tint, style: FillStyle(eoFill: true))
+            case "copilot":
+                // goggles silhouette via SF Symbols (Copilot's mark is
+                // raster-only; the symbol reads as the visor)
+                Image(systemName: "eyeglasses")
+                    .font(.system(size: size * 0.85, weight: .bold))
+                    .foregroundStyle(tint)
+            case "amp":
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: size * 0.9, weight: .semibold))
+                    .foregroundStyle(tint)
             case "opencode":
                 // two-tone like the original mark: bright outer frame,
                 // dimmed inner block — opacities of the tint so state

@@ -10,6 +10,9 @@ enum ToolIntegration: String, CaseIterable {
     case cursor
     case opencode
     case pi
+    case gemini
+    case copilot
+    case amp
 
     var displayName: String {
         switch self {
@@ -19,8 +22,18 @@ enum ToolIntegration: String, CaseIterable {
         case .cursor: return "Cursor"
         case .opencode: return "opencode"
         case .pi: return "Pi"
+        case .gemini: return "Gemini CLI"
+        case .copilot: return "Copilot CLI"
+        case .amp: return "Amp"
         }
     }
+
+    /// Amp's hooks are declarative-only (no exec action) — nothing for
+    /// `aerie hook` to hang off yet. Detection + a clear message.
+    var isDetectionOnly: Bool { self == .amp }
+
+    /// Copilot's hooks are per-file manifests: aerie owns a whole file.
+    var installsAsOwnFile: Bool { self == .copilot }
 
     /// How the integration installs: merged into a JSON hooks config, or a
     /// generated script file dropped into the tool's plugin/extension dir.
@@ -43,6 +56,11 @@ enum ToolIntegration: String, CaseIterable {
         // Generated plugin/extension files (script-based installs).
         case .opencode: return Self.home.appendingPathComponent(".config/opencode/plugins/aerie.js")
         case .pi: return Self.home.appendingPathComponent(".pi/agent/extensions/aerie-status.ts")
+        // Legacy Gemini CLI (pre-Antigravity) — nested Claude-style schema.
+        case .gemini: return Self.home.appendingPathComponent(".gemini/settings.json")
+        // Copilot: per-app hook manifest file, wholly aerie-owned.
+        case .copilot: return Self.home.appendingPathComponent(".copilot/hooks/aerie.json")
+        case .amp: return Self.home.appendingPathComponent(".config/amp/settings.json")
         }
     }
 
@@ -72,18 +90,50 @@ enum ToolIntegration: String, CaseIterable {
             return binaryOnPath("pi")
                 || FileManager.default.fileExists(
                     atPath: Self.home.appendingPathComponent(".pi/agent").path)
+        case .gemini:
+            // NOT just ~/.gemini — antigravity nests its config there too
+            return binaryOnPath("gemini")
+                || FileManager.default.fileExists(
+                    atPath: Self.home.appendingPathComponent(".gemini/settings.json").path)
+        case .copilot:
+            return binaryOnPath("copilot") || binaryOnPath("gh-copilot")
+                || FileManager.default.fileExists(
+                    atPath: Self.home.appendingPathComponent(".copilot").path)
+        case .amp:
+            return binaryOnPath("amp")
+                || FileManager.default.fileExists(
+                    atPath: Self.home.appendingPathComponent(".config/amp").path)
         }
     }
 
     /// Are aerie hooks currently present in the tool's config?
     var isInstalled: Bool {
-        if installsAsScript {
+        if isDetectionOnly { return false }
+        if installsAsScript || installsAsOwnFile {
             // whole file is ours; presence = installed
             return FileManager.default.fileExists(atPath: configURL.path)
         }
         guard let data = try? Data(contentsOf: configURL),
               let text = String(data: data, encoding: .utf8) else { return false }
         return text.contains("aerie hook ")
+    }
+
+    /// Copilot hook manifest — one file, wholly aerie's, all events mapped.
+    func copilotManifest(binaryPath: String) -> String {
+        let entries = eventMap.map { toolEvent, aerieEvent, flags in
+            """
+                "\(toolEvent)": [
+                  { "type": "command", "command": "\(binaryPath) hook \(aerieEvent) --source copilot\(flags)" }
+                ]
+            """
+        }.joined(separator: ",\n")
+        return """
+        {
+          "hooks": {
+        \(entries)
+          }
+        }
+        """
     }
 
     /// Event mapping: tool's hook event name → (aerie event, extra CLI flags).
@@ -122,8 +172,29 @@ enum ToolIntegration: String, CaseIterable {
                 ("stop", "Stop", ""),
                 ("sessionEnd", "SessionEnd", ""),
             ]
-        case .opencode, .pi:
-            return [] // script-based: the generated plugin maps events itself
+        case .gemini:
+            // legacy Gemini CLI event names (BeforeTool/AfterTool era)
+            return [
+                ("SessionStart", "SessionStart", ""),
+                ("BeforeTool", "PreToolUse", ""),
+                ("AfterTool", "PostToolUse", ""),
+                ("AfterAgent", "Stop", ""),
+                ("Notification", "Notification", ""),
+                ("SessionEnd", "SessionEnd", ""),
+            ]
+        case .copilot:
+            // Claude-style casing per Copilot CLI hook docs
+            return [
+                ("SessionStart", "SessionStart", ""),
+                ("UserPromptSubmit", "UserPromptSubmit", ""),
+                ("PreToolUse", "PreToolUse", ""),
+                ("PostToolUse", "PostToolUse", ""),
+                ("Notification", "Notification", ""),
+                ("Stop", "Stop", ""),
+                ("SessionEnd", "SessionEnd", ""),
+            ]
+        case .opencode, .pi, .amp:
+            return [] // script-based or detection-only
         }
     }
 
@@ -216,6 +287,22 @@ enum ToolIntegration: String, CaseIterable {
         guard self != .claude else {
             return try HooksPatcher.install(binaryPath: binaryPath)
         }
+        if isDetectionOnly {
+            throw ConfigError.malformed(
+                "\(displayName): detection only — its hooks can't run external commands yet")
+        }
+        if installsAsOwnFile {
+            // whole manifest is ours; overwrite = regenerate
+            let manifest = copilotManifest(binaryPath: binaryPath)
+            if let existing = try? String(contentsOf: configURL, encoding: .utf8),
+               existing == manifest {
+                return false
+            }
+            try FileManager.default.createDirectory(
+                at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try manifest.write(to: configURL, atomically: true, encoding: .utf8)
+            return true
+        }
         if installsAsScript {
             let script = scriptContents(binaryPath: binaryPath)
             if let existing = try? String(contentsOf: configURL, encoding: .utf8),
@@ -260,7 +347,8 @@ enum ToolIntegration: String, CaseIterable {
         guard self != .claude else {
             return try HooksPatcher.uninstall(binaryPath: binaryPath)
         }
-        if installsAsScript {
+        if isDetectionOnly { return false }
+        if installsAsOwnFile || installsAsScript {
             guard FileManager.default.fileExists(atPath: configURL.path) else { return false }
             try FileManager.default.removeItem(at: configURL)
             return true

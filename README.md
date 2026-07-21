@@ -12,8 +12,8 @@ on a cliff face, which is where your agents now roost, watching.
 </p>
 
 aerie watches every AI coding agent running on your machine — **Claude Code,
-Codex CLI, Antigravity CLI, Cursor, opencode, and Pi** — and lives in the
-notch:
+Codex CLI, Antigravity CLI, Cursor, opencode, Pi, Gemini CLI, and Copilot
+CLI** — and lives in the notch. Free, local, no accounts, no telemetry.
 
 - **Idle**: invisible. The widget tucks behind the physical notch; clicks
   pass through.
@@ -33,6 +33,29 @@ and age. A collapsed **RECENT** section lists what finished lately. The
 gear opens settings; the first launch opens a setup wizard that installs
 hooks into whichever tools you enable.
 
+## Beyond monitoring
+
+- **Approve from the notch** (opt-in per tool): when an agent hits a
+  permission prompt, an approval card appears with the FULL command —
+  never truncated — plus Allow (⌘Y), Deny (⌘N), and "use terminal" (Esc).
+  Ignoring it is always safe: the request falls back to the tool's own
+  terminal prompt at timeout. The collapsed pill can never approve;
+  Allow is briefly disarmed after the card appears so a stray keystroke
+  can't approve something you haven't seen. Claude and Codex support
+  allow/deny; Cursor is veto-only (its hook `allow` is unreliable
+  upstream). Enabling Claude approval adds latency to matched tool calls
+  — an allowlist mirror skips the notch for commands your settings
+  already auto-allow.
+- **Jump to terminal**: click a session row to focus the pane it lives in
+  — tmux pane, iTerm2 tab, or Terminal.app tab (AppleScript needs a
+  one-time automation consent); other terminals get app activation. The
+  approval card has a jump button too: go look before you decide.
+- **Sound alerts**: short synthesized cues (approval, needs-input,
+  completion) — volume + mute in settings.
+- **Usage bars** (opt-in): local-only quota tracking. Codex is read from
+  its session files; Claude via a statusline wrapper that tees
+  `rate_limits` while passing your existing statusline through untouched.
+
 ## How it works
 
 One binary, three roles:
@@ -45,18 +68,21 @@ One binary, three roles:
   system; reads the hook JSON on stdin, forwards a compact event over the
   socket (150 ms timeout, always exits 0 — a dead app never blocks an
   agent CLI).
-- `aerie install | uninstall | status | doctor | send | reset | quit`.
+- `aerie install | uninstall | status | doctor | approve | deny | send | reset | quit`.
 
 **Per-tool integration** (all opt-in via the wizard or settings):
 
-| tool | mechanism |
-|---|---|
-| Claude Code | hook entries merged into `~/.claude/settings.json` |
-| Codex CLI | `~/.codex/hooks.json` (trust once via `/hooks` in codex) |
-| Antigravity CLI | `~/.gemini/antigravity-cli/hooks.json` |
-| Cursor (IDE + CLI) | `~/.cursor/hooks.json` (shared schema) |
-| opencode | generated Bun plugin at `~/.config/opencode/plugins/aerie.js` |
-| Pi | generated extension at `~/.pi/agent/extensions/aerie-status.ts` |
+| tool | mechanism | approval |
+|---|---|---|
+| Claude Code | hook entries merged into `~/.claude/settings.json` | allow / deny |
+| Codex CLI | `~/.codex/hooks.json` (trust once via `/hooks` in codex) | allow / deny |
+| Antigravity CLI | `~/.gemini/antigravity-cli/hooks.json` | — |
+| Cursor (IDE + CLI) | `~/.cursor/hooks.json` (shared schema) | deny only |
+| opencode | generated Bun plugin at `~/.config/opencode/plugins/aerie.js` | — |
+| Pi | generated extension at `~/.pi/agent/extensions/aerie-status.ts` | — |
+| Gemini CLI (legacy) | hook entries merged into `~/.gemini/settings.json` | — |
+| Copilot CLI | manifest at `~/.copilot/hooks/aerie.json` | — |
+| Amp | detection only (its hooks can't run external commands yet) | — |
 
 JSON configs are merged append-only — existing hooks are preserved, a
 timestamped backup is taken first, malformed configs abort the install
