@@ -110,6 +110,10 @@ enum HookCommand {
             }
         }
 
+        // Terminal identity, captured once per session for jump-to-terminal.
+        // Involves a few `ps` execs, so SessionStart only.
+        let term = event == "SessionStart" ? TerminalContext.capture() : nil
+
         let req = WireRequest(
             cmd: "event",
             sessionID: sessionID,
@@ -126,7 +130,11 @@ enum HookCommand {
             toolURL: clip(toolInput?["url"] as? String),
             notificationType: notificationType,
             message: clip(message),
-            model: clip(model)
+            model: clip(model),
+            termProgram: term?.termProgram,
+            tmuxPane: term?.tmuxPane,
+            itermSession: term?.itermSession,
+            tty: term?.tty
         )
         _ = try? SocketClient.request(req, timeoutMS: 150)
         exit(0)

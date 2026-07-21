@@ -87,9 +87,10 @@ struct WireSessionInfo: Codable {
     let state: String
     let activity: String
     let ageSeconds: Int
+    var terminal: String?    // debug/doctor: "iTerm2 %1 /dev/ttys002"
 
     enum CodingKeys: String, CodingKey {
-        case id, project, source, model, state, activity
+        case id, project, source, model, state, activity, terminal
         case ageSeconds = "age_s"
     }
 }

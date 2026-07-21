@@ -35,6 +35,20 @@ struct SessionRow: Identifiable, Equatable, Sendable {
     let activity: String
     let lastEvent: Date
     let firstEvent: Date
+    let cwd: String?
+    let terminal: TerminalRef?
+}
+
+/// Where a session's CLI lives on screen — enough identity to jump there.
+struct TerminalRef: Equatable, Sendable {
+    var termProgram: String?
+    var tmuxPane: String?
+    var itermSession: String?
+    var tty: String?
+
+    var isEmpty: Bool {
+        termProgram == nil && tmuxPane == nil && itermSession == nil && tty == nil
+    }
 }
 
 /// A pending permission request: an agent's hook is parked waiting for the
@@ -75,6 +89,7 @@ final class SessionStore {
         var activity: String
         var source: String = "claude"
         var model: String?
+        var terminal: TerminalRef?
     }
 
     /// "claude-fable-5" → "fable-5", "gpt-5.2-codex" stays, strip dates.
@@ -140,9 +155,15 @@ final class SessionStore {
             sessions[sessionID] = nil
             return
         case "SessionStart":
+            var terminal: TerminalRef?
+            let ref = TerminalRef(
+                termProgram: req.termProgram, tmuxPane: req.tmuxPane,
+                itermSession: req.itermSession, tty: req.tty)
+            if !ref.isEmpty { terminal = ref }
             sessions[sessionID] = Session(
                 state: .idle, lastEvent: ts, firstEvent: ts, cwd: req.cwd,
-                activity: "session started", source: req.source ?? "claude")
+                activity: "session started", source: req.source ?? "claude",
+                terminal: terminal)
             return
         default:
             break
@@ -246,7 +267,9 @@ final class SessionStore {
                     state: s.state,
                     activity: s.activity,
                     lastEvent: s.lastEvent,
-                    firstEvent: s.firstEvent)
+                    firstEvent: s.firstEvent,
+                    cwd: s.cwd,
+                    terminal: s.terminal)
             }
             .sorted {
                 if $0.state != $1.state { return $0.state > $1.state }

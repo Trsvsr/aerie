@@ -132,7 +132,8 @@ final class HUDState {
                     SessionRow(id: $0.id, project: $0.project, source: $0.source,
                                model: $0.model, state: .idle, activity: $0.finalActivity,
                                lastEvent: $0.endedAt,
-                               firstEvent: $0.endedAt.addingTimeInterval(-$0.duration))
+                               firstEvent: $0.endedAt.addingTimeInterval(-$0.duration),
+                               cwd: nil, terminal: nil)
                 }
                 guard let ended else { continue }
                 if settings.soundsEnabled { sounds?.play(.completion) }

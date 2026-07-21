@@ -400,6 +400,19 @@ struct ApprovalCardView: View {
                     }
                 }
 
+                Button {
+                    // let the user inspect the terminal before deciding
+                    if let row = hud.displayRows.first(where: { $0.id == approval.sessionID }) {
+                        TerminalJumper.jump(to: row)
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.forward.square")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+                .buttonStyle(.plain)
+                .help("jump to terminal")
+
                 Spacer()
                 Text(approval.canAllow ? "⌘Y allow · ⌘N deny · esc → terminal"
                                        : "⌘N deny · esc → terminal")
@@ -610,6 +623,7 @@ struct SettingsPane: View {
 
 struct SessionRowView: View {
     let row: SessionRow
+    @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -642,6 +656,11 @@ struct SessionRowView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
+            if hovering {
+                Image(systemName: "arrow.up.forward.square")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.5))
+            }
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text(relativeAge(from: row.lastEvent, to: context.date))
                     .font(.caption2.monospacedDigit())
@@ -650,6 +669,10 @@ struct SessionRowView: View {
         }
         .padding(.horizontal, 30)
         .padding(.vertical, 9)
+        .background(hovering ? Color.white.opacity(0.04) : .clear)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .onTapGesture { TerminalJumper.jump(to: row) }
     }
 
     private func relativeAge(from: Date, to now: Date) -> String {

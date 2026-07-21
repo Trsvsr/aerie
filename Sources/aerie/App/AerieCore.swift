@@ -185,12 +185,16 @@ final class AerieCore {
             ok: true,
             aggregate: store.aggregate().rawValue,
             summary: store.summary(),
-            sessions: store.rows().map {
+            sessions: store.rows().map { row in
                 WireSessionInfo(
-                    id: $0.id, project: $0.project, source: $0.source,
-                    model: $0.model, state: $0.state.rawValue,
-                    activity: $0.activity,
-                    ageSeconds: Int(now.timeIntervalSince($0.lastEvent)))
+                    id: row.id, project: row.project, source: row.source,
+                    model: row.model, state: row.state.rawValue,
+                    activity: row.activity,
+                    ageSeconds: Int(now.timeIntervalSince(row.lastEvent)),
+                    terminal: row.terminal.map {
+                        [$0.termProgram, $0.tmuxPane, $0.tty]
+                            .compactMap { $0 }.joined(separator: " ")
+                    })
             },
             lastSeenBySource: store.lastSeenBySource.mapValues { $0.timeIntervalSince1970 },
             approvals: store.approvals.map {
