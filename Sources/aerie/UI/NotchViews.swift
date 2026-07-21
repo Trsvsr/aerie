@@ -262,7 +262,7 @@ struct ExpandedView: View {
                         }
                         .padding(.vertical, 6)
                     }
-                    .frame(maxHeight: 120)
+                    .frame(maxHeight: 200)
                 }
             } else if hud.displayRows.isEmpty {
                 Text("no active sessions")
@@ -280,7 +280,7 @@ struct ExpandedView: View {
                     }
                     .padding(.vertical, 6)
                 }
-                .frame(maxHeight: 280)
+                .frame(maxHeight: 420)
             }
 
             if hud.settings.usageTrackingEnabled, !hud.showSettings, !hud.showWizard {
@@ -580,75 +580,156 @@ struct RecentsSection: View {
 /// Settings inside the expanded card: behavior toggles + per-tool visibility.
 struct SettingsPane: View {
     var hud: HUDState
+    @State private var tab: Tab = .general
+
+    enum Tab: String, CaseIterable {
+        case general = "General"
+        case tools = "Tools"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // tab strip
+            HStack(spacing: 14) {
+                ForEach(Tab.allCases, id: \.self) { t in
+                    Button {
+                        withAnimation(.spring(duration: 0.2)) { tab = t }
+                    } label: {
+                        Text(t.rawValue)
+                            .font(.caption.weight(tab == t ? .semibold : .regular))
+                            .foregroundStyle(tab == t ? .white.opacity(0.9) : .white.opacity(0.4))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 30)
+            .padding(.vertical, 8)
+
+            // content scrolls — the pane can grow without clipping
+            ScrollView {
+                Group {
+                    switch tab {
+                    case .general: GeneralSettingsTab(hud: hud)
+                    case .tools: ToolsSettingsTab(hud: hud)
+                    }
+                }
+                .padding(.horizontal, 30)
+                .padding(.vertical, 8)
+            }
+            .frame(maxHeight: 400)
+        }
+        .toggleStyle(.switch)
+        .controlSize(.mini)
+        .font(.caption)
+        .foregroundStyle(.white.opacity(0.8))
+        .tint(Color(red: 0.85, green: 0.44, blue: 0.24))
+    }
+}
+
+private struct GeneralSettingsTab: View {
+    var hud: HUDState
 
     var body: some View {
         @Bindable var settings = hud.settings
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("BEHAVIOR")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.3))
-                Toggle("Expand on hover", isOn: $settings.hoverToExpand)
-                Toggle("Open from notch when idle", isOn: $settings.expandWhenIdle)
-                Toggle("Hide in fullscreen apps", isOn: $settings.hideInFullscreen)
-                Toggle("Auto-open on approval requests", isOn: $settings.autoExpandOnApproval)
-                HStack(spacing: 8) {
-                    Toggle("Sounds", isOn: $settings.soundsEnabled)
-                    if settings.soundsEnabled {
-                        Slider(value: Binding(
-                            get: { settings.soundVolume },
-                            set: { settings.soundVolume = $0; hud.sounds?.volume = Float($0) }
-                        ), in: 0...1)
-                        .controlSize(.mini)
-                        .frame(width: 80)
-                        Button {
-                            hud.sounds?.play(.completion)
-                        } label: {
-                            Image(systemName: "play.circle")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.4))
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle("Expand on hover", isOn: $settings.hoverToExpand)
+            Toggle("Open from notch when idle", isOn: $settings.expandWhenIdle)
+            Toggle("Hide in fullscreen apps", isOn: $settings.hideInFullscreen)
+            Toggle("Auto-open on approval requests", isOn: $settings.autoExpandOnApproval)
+            Toggle("Usage tracking (local quota bars)", isOn: Binding(
+                get: { settings.usageTrackingEnabled },
+                set: { on in
+                    settings.usageTrackingEnabled = on
+                    do {
+                        if on {
+                            try HooksPatcher.StatuslinePatcher.install(binaryPath: currentBinaryPath())
+                        } else {
+                            try HooksPatcher.StatuslinePatcher.uninstall()
                         }
-                        .buttonStyle(.plain)
+                    } catch {
+                        log("statusline patch failed: \(error)")
                     }
                 }
-                HStack(spacing: 8) {
-                    Text("Notch seam")
-                    Stepper(
-                        String(format: "%+.1f pt", settings.seamOffset),
-                        value: $settings.seamOffset, in: -6...4, step: 0.5)
-                        .fixedSize()
-                    Text("adjust until the widget meets the notch edge")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.3))
+            ))
+            HStack(spacing: 8) {
+                Toggle("Sounds", isOn: $settings.soundsEnabled)
+                if settings.soundsEnabled {
+                    Slider(value: Binding(
+                        get: { settings.soundVolume },
+                        set: { settings.soundVolume = $0; hud.sounds?.volume = Float($0) }
+                    ), in: 0...1)
+                    .controlSize(.mini)
+                    .frame(width: 80)
+                    Button {
+                        hud.sounds?.play(.completion)
+                    } label: {
+                        Image(systemName: "play.circle")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
+            HStack(spacing: 8) {
+                Text("Notch seam")
+                Stepper(
+                    String(format: "%+.1f pt", settings.seamOffset),
+                    value: $settings.seamOffset, in: -6...4, step: 0.5)
+                    .fixedSize()
+            }
+            Text("adjust the seam until the widget meets the notch edge")
+                .font(.system(size: 9))
+                .foregroundStyle(.white.opacity(0.3))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("TOOLS")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.3))
-                ForEach(AerieSettings.knownTools, id: \.rawValue) { tool in
+private struct ToolsSettingsTab: View {
+    var hud: HUDState
+
+    var body: some View {
+        @Bindable var settings = hud.settings
+        VStack(alignment: .leading, spacing: 6) {
+            // column headers
+            HStack {
+                Text("tool")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("show")
+                    .frame(width: 44)
+                Text("approve")
+                    .frame(width: 54)
+            }
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.3))
+
+            ForEach(AerieSettings.knownTools, id: \.rawValue) { tool in
+                HStack {
                     HStack(spacing: 8) {
-                        Toggle(isOn: Binding(
-                            get: { settings.isEnabled(tool.rawValue) },
-                            set: { settings.setEnabled(tool.rawValue, $0) }
-                        )) {
-                            HStack(spacing: 8) {
-                                SourceBadge(source: tool.rawValue, state: .working, size: 12)
-                                Text(tool.displayName)
-                                if !tool.isDetected {
-                                    Text("not detected")
-                                        .font(.system(size: 9))
-                                        .foregroundStyle(.white.opacity(0.3))
-                                } else if !tool.isInstalled {
-                                    Text("hooks not installed")
-                                        .font(.system(size: 9))
-                                        .foregroundStyle(.orange.opacity(0.6))
-                                }
-                            }
+                        SourceBadge(source: tool.rawValue, state: .working, size: 12)
+                        Text(tool.displayName)
+                        if tool.isDetectionOnly {
+                            statusTag("detection only", .white.opacity(0.3))
+                        } else if !tool.isDetected {
+                            statusTag("not detected", .white.opacity(0.3))
+                        } else if !tool.isInstalled {
+                            statusTag("no hooks", .orange.opacity(0.6))
                         }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Toggle("", isOn: Binding(
+                        get: { settings.isEnabled(tool.rawValue) },
+                        set: { settings.setEnabled(tool.rawValue, $0) }
+                    ))
+                    .labelsHidden()
+                    .frame(width: 44)
+                    .disabled(tool.isDetectionOnly)
+
+                    Group {
                         if tool.supportsApproval, tool.isDetected, tool.isInstalled {
-                            Toggle(isOn: Binding(
+                            Toggle("", isOn: Binding(
                                 get: { settings.approvalSources.contains(tool.rawValue) },
                                 set: { on in
                                     do {
@@ -663,50 +744,41 @@ struct SettingsPane: View {
                                         log("approval toggle failed for \(tool.rawValue): \(error)")
                                     }
                                 }
-                            )) {
-                                Text(tool == .cursor ? "veto" : "approve")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.white.opacity(0.45))
-                            }
+                            ))
+                            .labelsHidden()
+                        } else {
+                            Text(tool == .cursor ? "" : "—")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.white.opacity(0.2))
                         }
                     }
+                    .frame(width: 54)
                 }
-                Text("approve = decide agent permissions from the notch (ignoring falls back to the terminal)")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.white.opacity(0.25))
-                Toggle("Usage tracking (local quota bars)", isOn: Binding(
-                    get: { settings.usageTrackingEnabled },
-                    set: { on in
-                        settings.usageTrackingEnabled = on
-                        do {
-                            if on {
-                                try HooksPatcher.StatuslinePatcher.install(binaryPath: currentBinaryPath())
-                            } else {
-                                try HooksPatcher.StatuslinePatcher.uninstall()
-                            }
-                        } catch {
-                            log("statusline patch failed: \(error)")
-                        }
-                    }
-                ))
-                Button("set up tool hooks…") {
-                    withAnimation(.spring(duration: 0.25)) {
-                        hud.showWizard = true
-                    }
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.45))
             }
+
+            Text("show = display sessions · approve = decide permissions from the notch (Cursor: deny-only; ignoring always falls back to the terminal)")
+                .font(.system(size: 9))
+                .foregroundStyle(.white.opacity(0.25))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+
+            Button("set up tool hooks…") {
+                withAnimation(.spring(duration: 0.25)) {
+                    hud.showWizard = true
+                }
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 10))
+            .foregroundStyle(.white.opacity(0.45))
+            .padding(.top, 2)
         }
-        .toggleStyle(.switch)
-        .controlSize(.mini)
-        .font(.caption)
-        .foregroundStyle(.white.opacity(0.8))
-        .tint(Color(red: 0.85, green: 0.44, blue: 0.24))
-        .padding(.horizontal, 30)
-        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func statusTag(_ text: String, _ color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 8))
+            .foregroundStyle(color)
     }
 }
 

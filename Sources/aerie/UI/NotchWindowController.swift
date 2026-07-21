@@ -9,7 +9,7 @@ struct NotchGeometry: Equatable {
 
     static let wingWidth: CGFloat = 36
     static let panelWidth: CGFloat = 520
-    static let panelHeight: CGFloat = 380
+    static let panelHeight: CGFloat = 560
 
     var collapsedWidth: CGFloat { notchWidth + 2 * Self.wingWidth }
 
