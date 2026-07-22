@@ -9,6 +9,21 @@ enum StatuslineCommand {
     static func run(args: [String]) -> Never {
         let stdin = FileHandle.standardInput.readDataToEndOfFile()
 
+        // Keep the last raw payload around for schema debugging — whether
+        // Claude ever calls us, and whether the payload actually carries
+        // rate_limits, was previously invisible (no log line, no receipt).
+        ensurePrivateAerieDirectory()
+        let payloadDir = aerieDirectory().appendingPathComponent("last-payloads")
+        try? FileManager.default.createDirectory(
+            at: payloadDir, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: payloadDir.path)
+        let payloadDest = payloadDir.appendingPathComponent("statusline.json")
+        try? stdin.prefix(4096).write(to: payloadDest)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600], ofItemAtPath: payloadDest.path)
+
         // tee rate_limits (best-effort; display must never break on failure)
         if let obj = try? JSONSerialization.jsonObject(with: stdin) as? [String: Any],
            let rl = obj["rate_limits"] as? [String: Any] {

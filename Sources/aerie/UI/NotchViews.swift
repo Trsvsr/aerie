@@ -173,7 +173,7 @@ struct CollapsedView: View {
                         .font(.caption2.monospacedDigit().weight(.bold))
                         .foregroundStyle(.red)
                 } else if hud.displayRows.count == 1, let solo = hud.displayRows.first {
-                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text(compactDuration(from: solo.firstEvent, to: context.date))
                             .font(.caption2.monospacedDigit().weight(.semibold))
                             .foregroundStyle(.white.opacity(0.75))
@@ -379,10 +379,26 @@ struct ApprovalCardView: View {
                 Button {
                     hud.resolveApproval?(approval.id, "deny")
                 } label: {
-                    Label("Deny", systemImage: "xmark")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.red)
-                        .fixedSize()   // don't reflow during the expand scale
+                    // The "xmark" glyph renders with different vertical
+                    // metrics than "checkmark" even at identical font/size,
+                    // so the icon+text row's own bounding box ends up a
+                    // different height/shape from Allow's — .bordered then
+                    // centers that box within an identically-sized button,
+                    // landing the baseline a few points higher. Neither
+                    // .firstTextBaseline alignment nor a plain HStack fixed
+                    // this (tried both, re-measured pixel-for-pixel against
+                    // Allow both times — still off). This offset is a
+                    // calibrated correction from that measurement, not a
+                    // structural fix — if the font/icon ever changes, re-
+                    // measure and adjust.
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Image(systemName: "xmark")
+                        Text("Deny")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .offset(y: 2.5)
                 }
                 .buttonStyle(.bordered)
                 .keyboardShortcut("n", modifiers: .command)
@@ -394,10 +410,13 @@ struct ApprovalCardView: View {
                             guard Date() >= hud.approvalArmedAt else { return }
                             hud.resolveApproval?(approval.id, "allow")
                         } label: {
-                            Label("Allow", systemImage: "checkmark")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(armed ? .green : .gray)
-                                .fixedSize()
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Image(systemName: "checkmark")
+                                Text("Allow")
+                            }
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(armed ? .green : .gray)
+                            .fixedSize(horizontal: true, vertical: false)
                         }
                         .buttonStyle(.bordered)
                         .keyboardShortcut("y", modifiers: .command)
@@ -456,13 +475,13 @@ struct UsageSection: View {
                     HStack(spacing: 8) {
                         SourceBadge(source: p.provider, state: .off, size: 10)
                         ForEach(p.windows, id: \.label) { w in
-                            HStack(spacing: 4) {
+                            HStack(spacing: 5) {
                                 Text(w.label)
-                                    .font(.system(size: 8, design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.35))
+                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.55))
                                 GeometryReader { geo in
                                     ZStack(alignment: .leading) {
-                                        Capsule().fill(.white.opacity(0.08))
+                                        Capsule().fill(.white.opacity(0.14))
                                         Capsule()
                                             .fill(w.usedPercent > 85 ? Color.red
                                                   : w.usedPercent > 60 ? .orange : .green)
@@ -470,22 +489,22 @@ struct UsageSection: View {
                                                    * min(w.usedPercent, 100) / 100)
                                     }
                                 }
-                                .frame(width: 50, height: 3)
+                                .frame(width: 50, height: 4)
                                 Text("\(Int(w.usedPercent))%")
-                                    .font(.system(size: 8, design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.45))
+                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.85))
                                 if let resets = w.resetsAt {
                                     Text("↺\(compactETA(resets))")
-                                        .font(.system(size: 8, design: .monospaced))
-                                        .foregroundStyle(.white.opacity(0.25))
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(.white.opacity(0.5))
                                 }
                             }
                         }
                         Spacer()
                         if p.isStale {
                             Text("stale")
-                                .font(.system(size: 8))
-                                .foregroundStyle(.white.opacity(0.25))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.white.opacity(0.45))
                         }
                     }
                 }
@@ -691,6 +710,17 @@ private struct GeneralSettingsTab: View {
 private struct ToolsSettingsTab: View {
     var hud: HUDState
 
+    /// A never-detected, never-configured tool is just clutter here (the
+    /// wizard already covers "pick from what's detected"). But a tool that
+    /// WAS wired up and is now undetected (binary moved/uninstalled) has to
+    /// stay visible — otherwise there's no way to see or turn off the stale
+    /// config short of re-running the wizard.
+    private func isVisible(_ tool: ToolIntegration) -> Bool {
+        tool.isDetected || tool.isInstalled
+            || hud.settings.isEnabled(tool.rawValue)
+            || hud.settings.approvalSources.contains(tool.rawValue)
+    }
+
     var body: some View {
         @Bindable var settings = hud.settings
         VStack(alignment: .leading, spacing: 6) {
@@ -706,7 +736,7 @@ private struct ToolsSettingsTab: View {
             .font(.system(size: 9, weight: .semibold))
             .foregroundStyle(.white.opacity(0.3))
 
-            ForEach(AerieSettings.knownTools, id: \.rawValue) { tool in
+            ForEach(AerieSettings.knownTools.filter(isVisible), id: \.rawValue) { tool in
                 HStack {
                     HStack(spacing: 8) {
                         SourceBadge(source: tool.rawValue, state: .working, size: 12)

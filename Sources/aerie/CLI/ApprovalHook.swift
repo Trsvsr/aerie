@@ -19,8 +19,11 @@ enum ApprovalHook {
         else { exit(0) }
 
         // Fast-exit: modes that never prompt shouldn't detour through us.
+        // "auto" is Claude Code's Auto Mode — it never shows the user a real
+        // permission prompt, so blocking on the notch here just adds a stall
+        // that fails open after readTimeoutMS with no actual decision made.
         if let mode = obj["permission_mode"] as? String,
-           ["bypassPermissions", "dontAsk"].contains(mode) {
+           ["bypassPermissions", "dontAsk", "auto"].contains(mode) {
             exit(0)
         }
 

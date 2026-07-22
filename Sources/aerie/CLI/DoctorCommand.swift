@@ -59,6 +59,22 @@ enum DoctorCommand {
             }
         }
 
+        // Usage tracking reads two purely local sources; report on each so
+        // "usage isn't showing" is diagnosable instead of a silent black box.
+        print("\nusage tracking:")
+        if let c = UsageReader.readClaude() {
+            print("  claude: captured \(agoLabel(c.capturedAt))\(c.isStale ? " (stale)" : "")")
+        } else {
+            print("  claude: no data — checking last-payloads/statusline.json will show"
+                + " whether Claude is calling the statusLine command at all, and whether"
+                + " that payload includes \"rate_limits\"")
+        }
+        if let x = UsageReader.readCodex() {
+            print("  codex:  captured \(agoLabel(x.capturedAt))\(x.isStale ? " (stale)" : "")")
+        } else {
+            print("  codex:  no rollout with rate_limits found under ~/.codex/sessions")
+        }
+
         // Common gotchas worth surfacing every time.
         var notes: [String] = []
         if ToolIntegration.codex.isInstalled {
