@@ -101,13 +101,26 @@ recents ring — summaries only, never transcripts or commands.
 ## Install
 
 ```sh
-swift build -c release
-cp .build/release/aerie ~/.local/bin/aerie
-~/.local/bin/aerie install     # LaunchAgent + Claude Code hooks; wizard handles the rest
+brew install trsvsr/aerie/aerie
+aerie install     # LaunchAgent + Claude Code hooks; wizard handles the rest
 ```
 
 Restart running agent sessions to pick up the hooks. `aerie uninstall`
-reverses everything. When something isn't reporting:
+reverses everything.
+
+### Build from source
+
+No Homebrew, or want to hack on it:
+
+```sh
+swift build -c release
+cp .build/release/aerie ~/.local/bin/aerie
+~/.local/bin/aerie install
+```
+
+### Troubleshooting
+
+When something isn't reporting:
 
 ```sh
 aerie doctor
