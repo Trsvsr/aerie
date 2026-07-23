@@ -15,8 +15,9 @@ permissions:
 
 jobs:
   build:
-    # arm64 runner — aerie only runs on Apple Silicon MacBooks with a notch
-    runs-on: macos-15
+    # arm64 runner — aerie only runs on Apple Silicon MacBooks with a notch.
+    # macos-15 is being deprecated by GitHub in favor of macos-26.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
         with:
