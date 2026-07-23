@@ -15,8 +15,11 @@ enum SocketClient {
     /// Split-timeout variant for approvals: connect/send must fail fast when
     /// the app is down (never stall the agent CLI), but the read may park
     /// for most of a minute while the user decides.
+    ///
+    /// `path` defaults to the real daemon socket; overridable so tests can
+    /// point at an isolated fake server instead of the live daemon.
     static func request(
-        _ req: WireRequest, sendTimeoutMS: Int, readTimeoutMS: Int
+        _ req: WireRequest, sendTimeoutMS: Int, readTimeoutMS: Int, path: String = socketPath()
     ) throws -> WireResponse {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw ClientError.connectFailed }
@@ -31,7 +34,6 @@ enum SocketClient {
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
-        let path = socketPath()
         let ok = path.withCString { src in
             withUnsafeMutableBytes(of: &addr.sun_path) { dst -> Bool in
                 let len = strlen(src)
