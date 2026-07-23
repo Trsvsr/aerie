@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and release (e.g. v0.1.0)"
+        required: true
+
+jobs:
+  build:
+    # arm64 runner — aerie only runs on Apple Silicon MacBooks with a notch
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Package
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          mkdir -p dist
+          cp .build/release/aerie dist/aerie
+          tar -czf "aerie-${tag}-arm64.tar.gz" -C dist aerie
+          shasum -a 256 "aerie-${tag}-arm64.tar.gz" > "aerie-${tag}-arm64.tar.gz.sha256"
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: |
+            aerie-*-arm64.tar.gz
+            aerie-*-arm64.tar.gz.sha256
