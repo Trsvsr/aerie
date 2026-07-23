@@ -100,6 +100,8 @@ recents ring — summaries only, never transcripts or commands.
 
 ## Install
 
+Requires macOS 15 (Sequoia) or later, on Apple Silicon.
+
 ```sh
 brew install trsvsr/aerie/aerie
 aerie install     # LaunchAgent + Claude Code hooks; wizard handles the rest
