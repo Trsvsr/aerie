@@ -116,7 +116,11 @@ struct WireResponse: Codable {
     }
 }
 
-let aerieVersion = "0.1.0"
+// Bump this alongside every `git tag vX.Y.Z` — it drifted from actual
+// releases before (stuck at 0.1.0 through the v0.1.1/v0.1.2 cuts) with
+// nothing to catch it; `aerie doctor`'s update check now depends on this
+// being accurate.
+let aerieVersion = "0.1.2"
 
 func aerieDirectory() -> URL {
     FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".aerie")

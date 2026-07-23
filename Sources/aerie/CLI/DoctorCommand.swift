@@ -75,6 +75,10 @@ enum DoctorCommand {
             print("  codex:  no rollout with rate_limits found under ~/.codex/sessions")
         }
 
+        if let update = updateMessage(latestTag: fetchLatestReleaseTag(), currentVersion: aerieVersion) {
+            print("\n\(update)")
+        }
+
         // Common gotchas worth surfacing every time.
         var notes: [String] = []
         if ToolIntegration.codex.isInstalled {
@@ -100,5 +104,42 @@ enum DoctorCommand {
         if s < 3600 { return "\(s / 60)m ago" }
         if s < 86_400 { return "\(s / 3600)h ago" }
         return "\(s / 86_400)d ago"
+    }
+
+    /// Pure comparison so this is testable without a real network call.
+    /// nil = nothing to report (up to date, or the fetch failed/timed out —
+    /// doctor must never hang or fail just because GitHub is unreachable).
+    /// Not full semver — just "different from what's installed" — fine for
+    /// this project's plain vX.Y.Z tags.
+    static func updateMessage(latestTag: String?, currentVersion: String) -> String? {
+        guard let latestTag else { return nil }
+        let latest = latestTag.hasPrefix("v") ? String(latestTag.dropFirst()) : latestTag
+        guard !latest.isEmpty, latest != currentVersion else { return nil }
+        return "update available: \(currentVersion) -> \(latest)"
+            + " (brew upgrade aerie, or github.com/Trsvsr/aerie/releases)"
+    }
+
+    /// Best-effort, short-timeout fetch — never let a network hiccup make
+    /// `doctor` hang or fail. Returns nil on any error, offline, or timeout.
+    private static func fetchLatestReleaseTag() -> String? {
+        guard let url = URL(string: "https://api.github.com/repos/Trsvsr/aerie/releases/latest")
+        else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 3
+        // required by GitHub's API — unauthenticated requests with no UA are rejected
+        request.setValue("aerie-doctor", forHTTPHeaderField: "User-Agent")
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var tag: String?
+        let task = URLSession.shared.dataTask(with: request) { data, _, _ in
+            defer { semaphore.signal() }
+            guard let data,
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return }
+            tag = obj["tag_name"] as? String
+        }
+        task.resume()
+        _ = semaphore.wait(timeout: .now() + 4)
+        return tag
     }
 }
