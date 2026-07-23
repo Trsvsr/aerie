@@ -10,6 +10,9 @@ on:
         description: "Tag to build and release (e.g. v0.1.0)"
         required: true
 
+permissions:
+  contents: write
+
 jobs:
   build:
     # arm64 runner — aerie only runs on Apple Silicon MacBooks with a notch
