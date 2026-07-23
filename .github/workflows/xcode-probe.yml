@@ -1,0 +1,18 @@
+name: Xcode Probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: macos-26
+    steps:
+      - name: List installed Xcode versions
+        run: |
+          ls -la /Applications/ | grep -i xcode
+          echo "---"
+          for app in /Applications/Xcode*.app; do
+            echo "== $app =="
+            defaults read "$app/Contents/Info" CFBundleShortVersionString 2>&1
+            defaults read "$app/Contents/Info" CFBundleVersion 2>&1
+          done
