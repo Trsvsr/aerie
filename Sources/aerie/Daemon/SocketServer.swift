@@ -86,7 +86,7 @@ final class SocketServer {
     /// Accepts land here; each connection's read is dispatched concurrently
     /// so one slow client can't delay others (or the core queue).
     private let ioQueue = DispatchQueue(
-        label: "com.trevor.aerie.socket-io", attributes: .concurrent)
+        label: "sh.schmitt.aerie.socket-io", attributes: .concurrent)
     private let handler: (WireRequest, ConnectionReply) -> Void
 
     init(queue: DispatchQueue, handler: @escaping (WireRequest, ConnectionReply) -> Void) {

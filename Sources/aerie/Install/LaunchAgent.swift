@@ -1,7 +1,7 @@
 import Foundation
 
 enum LaunchAgent {
-    static let label = "com.trevor.aerie"
+    static let label = "sh.schmitt.aerie"
 
     static func plistURL() -> URL {
         FileManager.default.homeDirectoryForCurrentUser

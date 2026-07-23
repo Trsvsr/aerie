@@ -18,7 +18,7 @@ struct Snapshot: Sendable {
 /// on a serial queue, runs the socket server, sweeps TTLs, parks approval
 /// replies, and publishes snapshots after every mutation.
 final class AerieCore {
-    private let queue = DispatchQueue(label: "com.trevor.aerie.core")
+    private let queue = DispatchQueue(label: "sh.schmitt.aerie.core")
     private let store = SessionStore()
     private var server: SocketServer?
     private var sweepTimer: DispatchSourceTimer?
