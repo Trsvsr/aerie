@@ -23,6 +23,15 @@ enum HooksPatcher {
     }
 
     /// Returns true if the settings changed.
+    ///
+    /// Replaces (not just appends-if-absent) any existing aerie entry per
+    /// event: `entryIsOurs` matches on the generic "aerie hook " marker, not
+    /// the exact binary path, so a stale entry from an older install (e.g.
+    /// before switching from a dev build path to a Homebrew Cellar path)
+    /// would otherwise be silently left pointing at a binary that may no
+    /// longer exist — install must have run once at that old path, but
+    /// re-running install alone (without an uninstall first) previously
+    /// never corrected it.
     @discardableResult
     static func install(binaryPath: String, settingsURL: URL? = nil, dryRun: Bool = false) throws -> Bool {
         let url = settingsURL ?? settingsPath()
@@ -31,11 +40,11 @@ enum HooksPatcher {
         var changed = false
 
         for event in events {
-            var entries = hooks[event] as? [[String: Any]] ?? []
-            let already = entries.contains { entryIsOurs($0, binaryPath: binaryPath) }
-            if !already {
-                entries.append(hookEntry(binaryPath: binaryPath, event: event))
-                hooks[event] = entries
+            let entries = hooks[event] as? [[String: Any]] ?? []
+            let others = entries.filter { !entryIsOurs($0, binaryPath: binaryPath) }
+            let newEntries = others + [hookEntry(binaryPath: binaryPath, event: event)]
+            if !entriesEqual(entries, newEntries) {
+                hooks[event] = newEntries
                 changed = true
                 if dryRun { print("+ hooks.\(event): \(binaryPath) hook \(event)") }
             }
@@ -47,6 +56,15 @@ enum HooksPatcher {
             try writeSettings(root, to: url)
         }
         return true
+    }
+
+    /// Order-sensitive but key-order-insensitive comparison (values are all
+    /// JSON-simple, so a sorted-keys round-trip is a reliable equality check).
+    private static func entriesEqual(_ a: [[String: Any]], _ b: [[String: Any]]) -> Bool {
+        guard let da = try? JSONSerialization.data(withJSONObject: a, options: [.sortedKeys]),
+              let db = try? JSONSerialization.data(withJSONObject: b, options: [.sortedKeys])
+        else { return false }
+        return da == db
     }
 
     @discardableResult
@@ -86,7 +104,11 @@ enum HooksPatcher {
 
     private static func readSettings(_ url: URL) throws -> [String: Any] {
         guard let data = try? Data(contentsOf: url) else { return [:] }
-        return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw NSError(domain: "aerie", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "\(url.path) is not valid JSON — refusing to touch it"])
+        }
+        return obj
     }
 
     private static func writeSettings(_ root: [String: Any], to url: URL) throws {

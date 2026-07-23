@@ -98,6 +98,76 @@ final class HooksPatcherTests: XCTestCase {
         let hooks = readBack(url)["hooks"] as! [String: Any]
         XCTAssertEqual(hooks.count, HooksPatcher.events.count)
     }
+
+    /// A binary-path change (e.g. dev build path -> Homebrew Cellar path, or
+    /// one Cellar version -> the next after brew upgrade) must correct the
+    /// existing entry in place, not leave it stale pointing at a binary that
+    /// may no longer exist. Regression test for a real bug: entryIsOurs
+    /// matches on the generic "aerie hook " marker, so a plain re-run of
+    /// install alone (no uninstall first) previously left the old path
+    /// untouched once any "ours" entry — at any path — was already present.
+    func testInstallUpdatesStaleBinaryPath() throws {
+        let url = writeFixture()
+        let oldPath = "/Users/trevor/.local/bin/aerie"
+        let newPath = "/opt/homebrew/Cellar/aerie/0.1.2/bin/aerie"
+        _ = try HooksPatcher.install(binaryPath: oldPath, settingsURL: url)
+
+        let changed = try HooksPatcher.install(binaryPath: newPath, settingsURL: url)
+        XCTAssertTrue(changed, "install must report a change when correcting a stale path")
+
+        let hooks = readBack(url)["hooks"] as! [String: Any]
+        for event in HooksPatcher.events {
+            let entries = hooks[event] as! [[String: Any]]
+            let ours = entries.filter { e in
+                ((e["hooks"] as! [[String: Any]]).first?["command"] as! String)
+                    .contains("aerie hook \(event)")
+            }
+            XCTAssertEqual(ours.count, 1, "expected exactly one aerie entry for \(event)")
+            let cmd = (ours[0]["hooks"] as! [[String: Any]])[0]["command"] as! String
+            XCTAssertTrue(cmd.hasPrefix(newPath), "expected updated path for \(event), got: \(cmd)")
+            XCTAssertFalse(cmd.hasPrefix(oldPath), "stale old path left in place for \(event)")
+        }
+        // claude-rpc entries still untouched throughout
+        let stop = hooks["Stop"] as! [[String: Any]]
+        XCTAssertEqual(stop.count, 2)
+    }
+
+    func testInstallRejectsMalformedJSON() throws {
+        let url = tmp.appendingPathComponent("settings.json")
+        try Data("{ not valid json".utf8).write(to: url)
+        XCTAssertThrowsError(try HooksPatcher.install(binaryPath: "/usr/local/bin/aerie", settingsURL: url)) { error in
+            XCTAssertTrue((error as NSError).localizedDescription.contains("not valid JSON"))
+        }
+        // refuses to touch it — original malformed content preserved verbatim
+        let stillThere = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertEqual(stillThere, "{ not valid json")
+    }
+
+    func testInstallWritesThroughSymlink() throws {
+        // Simulates a dotfiles-managed settings.json: the real file lives
+        // elsewhere and ~/.claude/settings.json is a symlink to it.
+        let realDir = tmp.appendingPathComponent("dotfiles")
+        try FileManager.default.createDirectory(at: realDir, withIntermediateDirectories: true)
+        let realFile = realDir.appendingPathComponent("claude-settings.json")
+        try JSONSerialization.data(withJSONObject: ["model": "opus"])
+            .write(to: realFile)
+
+        let linkPath = tmp.appendingPathComponent("settings.json")
+        try FileManager.default.createSymbolicLink(at: linkPath, withDestinationURL: realFile)
+
+        let changed = try HooksPatcher.install(binaryPath: "/usr/local/bin/aerie", settingsURL: linkPath)
+        XCTAssertTrue(changed)
+
+        // the symlink itself must still be a symlink, not replaced by a
+        // plain file (which would silently detach it from the dotfiles repo)
+        let attrs = try FileManager.default.attributesOfItem(atPath: linkPath.path)
+        XCTAssertEqual(attrs[.type] as? FileAttributeType, .typeSymbolicLink)
+
+        // and the real target file must have received the actual write
+        let real = readBack(realFile)
+        XCTAssertEqual(real["model"] as? String, "opus")
+        XCTAssertNotNil(real["hooks"])
+    }
 }
 
 extension HooksPatcherTests {
