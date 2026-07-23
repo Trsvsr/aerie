@@ -468,8 +468,22 @@ struct CountdownBar: View {
 struct UsageSection: View {
     @State private var usage: [ProviderUsage] = []
 
+    /// Providers whose tool is installed but have no usage reading at all —
+    /// shown as an explicit "unavailable" row rather than silently rendering
+    /// nothing, which reads as broken to anyone who doesn't already know
+    /// Claude's rate_limits statusline field has an upstream regression.
+    /// Gated on isDetected so someone who's never touched Codex doesn't see
+    /// a permanent "codex: usage unavailable" row for a tool they don't use.
+    private var missingProviders: [(source: String, tool: ToolIntegration)] {
+        [(source: "claude", tool: .claude), (source: "codex", tool: .codex)]
+            .filter { entry in
+                entry.tool.isDetected && !usage.contains { $0.provider == entry.source }
+            }
+    }
+
     var body: some View {
-        if !usage.isEmpty {
+        let missing = missingProviders
+        if !usage.isEmpty || !missing.isEmpty {
             VStack(spacing: 4) {
                 ForEach(usage, id: \.provider) { p in
                     HStack(spacing: 8) {
@@ -506,6 +520,15 @@ struct UsageSection: View {
                                 .font(.system(size: 10))
                                 .foregroundStyle(.white.opacity(0.45))
                         }
+                    }
+                }
+                ForEach(missing, id: \.source) { entry in
+                    HStack(spacing: 8) {
+                        SourceBadge(source: entry.source, state: .off, size: 10)
+                        Text("usage unavailable")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.white.opacity(0.35))
+                        Spacer()
                     }
                 }
             }
