@@ -120,7 +120,7 @@ struct WireResponse: Codable {
 // releases before (stuck at 0.1.0 through the v0.1.1/v0.1.2 cuts) with
 // nothing to catch it; `aerie doctor`'s update check now depends on this
 // being accurate.
-let aerieVersion = "0.1.2"
+let aerieVersion = "0.1.4"
 
 func aerieDirectory() -> URL {
     FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".aerie")
