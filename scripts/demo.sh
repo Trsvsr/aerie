@@ -18,10 +18,14 @@ send --session demo2 --event PreToolUse --cwd "$HOME/src/aerie" --tool Bash --co
 send --session demo3 --event PreToolUse --cwd /tmp/scratch --tool Grep --pattern "TODO"
 sleep 2
 
-echo "demo3 hits a permission prompt (dot should pulse red, summary flips)…"
-send --session demo3 --event Notification --cwd /tmp/scratch \
-    --notification-type permission_prompt --message "Claude needs your permission to use Bash"
-sleep 3
+echo "demo3 hits a real approval prompt (Deny/Allow card, dot pulses red)…"
+printf '%s' '{"session_id":"demo3","cwd":"/tmp/scratch","tool_name":"Bash","tool_input":{"command":"rm -rf old-logs/"},"permission_mode":"default"}' \
+    | "$AERIE" hook PreToolUse --approve --source claude >/dev/null &
+sleep 4
+
+echo "approving…"
+"$AERIE" approve >/dev/null
+sleep 1
 
 echo "demo3 resumes, demo1 finishes…"
 send --session demo3 --event PostToolUse --cwd /tmp/scratch

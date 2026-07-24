@@ -64,6 +64,35 @@ struct NotchRootView: View {
     }
 }
 
+/// Hand-drawn stand-in for .buttonStyle(.bordered) on the approval card's
+/// Deny/Allow buttons. .bordered is backed by native NSButton on macOS, and
+/// its internal content padding turned out to completely ignore the label's
+/// own SwiftUI-reported size — confirmed by a blunt test where a -12pt
+/// padding change on the label produced zero visible difference — so there
+/// was no way to fix its off-center vertical padding (icon+text sitting
+/// closer to the pill's top than its bottom) while staying on .bordered.
+/// Plain SwiftUI .padding + .background is fully native layout math instead
+/// of an opaque AppKit cell, so ordinary padding actually does what it says.
+struct PillButtonStyle: ButtonStyle {
+    @State private var hovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(white: 0.14))
+                    .opacity(configuration.isPressed ? 0.7 : 1)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(.white.opacity(hovering ? 0.06 : 0))
+            )
+            .onHover { hovering = $0 }
+    }
+}
+
 private func stateColor(_ state: SessionState) -> Color {
     switch state {
     case .needsInput: return .red
@@ -339,6 +368,7 @@ struct ApprovalCardView: View {
     var hud: HUDState
     let approval: PendingApproval
     let queued: Int
+    @State private var armed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -379,18 +409,6 @@ struct ApprovalCardView: View {
                 Button {
                     hud.resolveApproval?(approval.id, "deny")
                 } label: {
-                    // The "xmark" glyph renders with different vertical
-                    // metrics than "checkmark" even at identical font/size,
-                    // so the icon+text row's own bounding box ends up a
-                    // different height/shape from Allow's — .bordered then
-                    // centers that box within an identically-sized button,
-                    // landing the baseline a few points higher. Neither
-                    // .firstTextBaseline alignment nor a plain HStack fixed
-                    // this (tried both, re-measured pixel-for-pixel against
-                    // Allow both times — still off). This offset is a
-                    // calibrated correction from that measurement, not a
-                    // structural fix — if the font/icon ever changes, re-
-                    // measure and adjust.
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: "xmark")
                         Text("Deny")
@@ -398,29 +416,46 @@ struct ApprovalCardView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: true, vertical: false)
-                    .offset(y: 2.5)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(PillButtonStyle())
                 .keyboardShortcut("n", modifiers: .command)
 
                 if approval.canAllow {
-                    TimelineView(.periodic(from: .now, by: 0.2)) { context in
-                        let armed = context.date >= hud.approvalArmedAt
-                        Button {
-                            guard Date() >= hud.approvalArmedAt else { return }
-                            hud.resolveApproval?(approval.id, "allow")
-                        } label: {
-                            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                Image(systemName: "checkmark")
-                                Text("Allow")
-                            }
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(armed ? .green : .gray)
-                            .fixedSize(horizontal: true, vertical: false)
+                    // Root cause of the long-chased Deny/Allow baseline
+                    // mismatch: this button used to carry .disabled(!armed),
+                    // flipping false ~0.4s after the card appears. Confirmed
+                    // by direct isolation test that the disabled->enabled
+                    // transition itself corrupts this row's shared
+                    // .firstTextBaseline layout permanently — SwiftUI never
+                    // re-resolves it once the transition happens, regardless
+                    // of how much later it's inspected. It was never about
+                    // xmark vs checkmark metrics, a cold-start race, or
+                    // animation timing (all separately investigated and
+                    // ruled out — see git history). The safety guard against
+                    // an early click already lives in the action closure
+                    // below, so .disabled() was purely cosmetic — dropping
+                    // it and keeping only the color change avoids the
+                    // disabled-render path entirely without weakening the
+                    // arm-delay guarantee.
+                    Button {
+                        guard Date() >= hud.approvalArmedAt else { return }
+                        hud.resolveApproval?(approval.id, "allow")
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Image(systemName: "checkmark")
+                            Text("Allow")
                         }
-                        .buttonStyle(.bordered)
-                        .keyboardShortcut("y", modifiers: .command)
-                        .disabled(!armed)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(armed ? .green : .gray)
+                        .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .buttonStyle(PillButtonStyle())
+                    .keyboardShortcut("y", modifiers: .command)
+                    .task(id: hud.approvalArmedAt) {
+                        armed = Date() >= hud.approvalArmedAt
+                        guard !armed else { return }
+                        try? await Task.sleep(for: .seconds(hud.approvalArmedAt.timeIntervalSinceNow))
+                        armed = Date() >= hud.approvalArmedAt
                     }
                 }
 
