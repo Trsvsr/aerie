@@ -92,10 +92,21 @@ enum HooksPatcher {
         return true
     }
 
+    /// Matches the plain tracking entry this file owns — deliberately NOT
+    /// the `--approve`-flagged entry that `ToolIntegration.installApproval`
+    /// manages independently (comment there: "separate from status hooks;
+    /// independently removable"). Before this fix, this matched ANY "aerie
+    /// hook " command regardless of --approve, so a plain `aerie uninstall`
+    /// (e.g. during a binary-path switch) silently deleted the approval
+    /// hook too, and `install` never restored it — Claude Code permission
+    /// prompts stopped reaching the notch with no error anywhere. Confirmed
+    /// live: repeated uninstall/install cycles today for LaunchAgent/binary
+    /// switching did exactly this.
     private static func entryIsOurs(_ entry: [String: Any], binaryPath: String) -> Bool {
         guard let inner = entry["hooks"] as? [[String: Any]] else { return false }
         return inner.contains { hook in
             guard let cmd = hook["command"] as? String else { return false }
+            guard !cmd.contains("--approve") else { return false }
             // Match any aerie binary path, so uninstall works after the
             // binary moved (e.g. dev build path vs installed path).
             return cmd.hasPrefix(binaryPath) || cmd.contains("aerie hook ")

@@ -143,6 +143,51 @@ final class HooksPatcherTests: XCTestCase {
         XCTAssertEqual(stillThere, "{ not valid json")
     }
 
+    /// Regression test for a real, live bug: a bare `aerie uninstall` (run
+    /// e.g. during a LaunchAgent/binary-path switch, with no intent to touch
+    /// the separately-toggled approval hook at all) was silently deleting
+    /// the --approve-flagged PreToolUse entry that ToolIntegration.
+    /// installApproval manages independently, and the following `aerie
+    /// install` never restored it — Claude Code permission prompts stopped
+    /// reaching the notch with no error anywhere. Confirmed happening live
+    /// today from repeated uninstall/install cycles during binary swaps.
+    func testUninstallNeverTouchesApprovalEntry() throws {
+        let url = writeFixture()
+        _ = try HooksPatcher.install(binaryPath: "/usr/local/bin/aerie", settingsURL: url)
+
+        // simulate ToolIntegration.installApproval's own entry shape
+        var root = readBack(url)
+        var hooks = root["hooks"] as! [String: Any]
+        var pre = hooks["PreToolUse"] as! [[String: Any]]
+        pre.append([
+            "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+            "hooks": [["type": "command",
+                       "command": "/usr/local/bin/aerie hook PreToolUse --approve --source claude",
+                       "timeout": 60]],
+        ])
+        hooks["PreToolUse"] = pre
+        root["hooks"] = hooks
+        try! JSONSerialization.data(withJSONObject: root).write(to: url)
+
+        _ = try HooksPatcher.uninstall(binaryPath: "/usr/local/bin/aerie", settingsURL: url)
+
+        let afterUninstall = readBack(url)["hooks"] as! [String: Any]
+        let preAfter = afterUninstall["PreToolUse"] as! [[String: Any]]
+        XCTAssertTrue(preAfter.contains { e in
+            ((e["hooks"] as! [[String: Any]]).first?["command"] as! String).contains("--approve")
+        }, "uninstall must not remove the independently-managed approval entry")
+
+        // and a subsequent install (e.g. after switching binary paths) must
+        // not replace/collapse it into the plain entry either
+        _ = try HooksPatcher.install(binaryPath: "/opt/homebrew/bin/aerie", settingsURL: url)
+        let afterReinstall = readBack(url)["hooks"] as! [String: Any]
+        let preFinal = afterReinstall["PreToolUse"] as! [[String: Any]]
+        let approvalEntries = preFinal.filter { e in
+            ((e["hooks"] as! [[String: Any]]).first?["command"] as! String).contains("--approve")
+        }
+        XCTAssertEqual(approvalEntries.count, 1, "approval entry must survive a plain install untouched")
+    }
+
     func testInstallWritesThroughSymlink() throws {
         // Simulates a dotfiles-managed settings.json: the real file lives
         // elsewhere and ~/.claude/settings.json is a symlink to it.
